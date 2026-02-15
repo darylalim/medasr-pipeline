@@ -1,0 +1,13 @@
+huggingface_hub
+jiwer
+kenlm
+levenshtein
+librosa
+pyctcdecode
+python-dotenv
+pytest
+ruff
+streamlit
+torch
+transformers
+ty
