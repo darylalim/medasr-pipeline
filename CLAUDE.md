@@ -9,28 +9,30 @@ Streamlit web app for medical dictation transcription using Google's MedASR mode
 ## Commands
 
 ```bash
-pip install -r requirements.txt   # Install dependencies
-streamlit run streamlit_app.py    # Run app
-pytest                            # Run tests
-ruff check .                      # Lint
-ruff format .                     # Format
-ty check                          # Type check
+uv sync                                # Install all dependencies (including dev)
+uv run streamlit run streamlit_app.py  # Run app
+uv run pytest                          # Run tests
+uv run ruff check .                    # Lint
+uv run ruff format .                   # Format
+uv run ty check                        # Type check
 ```
 
 ## Architecture
 
 Audio input → librosa (16kHz) → AutoProcessor → model logits → log softmax → CTC beam search (kenlm, beam width 8) → transcribed text
 
-- `streamlit_app.py` — Main app with model caching (`@st.cache_resource`), auto device detection (MPS > CUDA > CPU), custom CTC decoder, metrics display, and JSON download
-- `utils/helper.py` — Text normalization, WER computation (jiwer), colored diff output
-- `tests/test_helper.py` — Unit tests for helper utilities (normalize, compute_wer, colored_diff, evaluate)
-- `tests/test_app.py` — Unit tests for transcribe function with mocked model/audio
+- `streamlit_app.py` — Main app with model caching (`@st.cache_resource`), auto device detection (MPS > CUDA > CPU), custom CTC decoder, session state persistence, status feedback, qualitative WER metrics with HTML word diff, and JSON download
+- `utils/helper.py` — Text normalization, WER computation (jiwer), colored diff output (ANSI and HTML)
+- `tests/test_helper.py` — Unit tests for helper utilities (normalize, compute_wer, colored_diff, html_diff, evaluate)
+- `tests/test_app.py` — Unit tests for transcribe and _wer_label with mocked model/audio
 - `tests/data/` — Sample audio and reference transcripts
 
 ## Notes
 
 - Unigram warnings from pyctcdecode are expected and suppressed — the MedASR tokenizer vocab does not align with the kenlm model's word vocabulary, matching the official notebook implementation
 - `warnings.filterwarnings` calls must remain before library imports to suppress warnings at import time; imports use `# noqa: E402` to satisfy ruff
+- On CUDA, inference runs in float16 for ~40-50% VRAM reduction and ~20-30% speedup; MPS and CPU remain float32 (float16 is unreliable on MPS, slower on CPU)
+- `torch.compile` is applied on CUDA only — first inference is slower (compilation warmup), subsequent calls are ~10-30% faster
 
 ## Environment
 
