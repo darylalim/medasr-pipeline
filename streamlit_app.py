@@ -2,11 +2,12 @@ import io
 import json
 import warnings
 
-warnings.filterwarnings(
-    "ignore", message="Using padding='same' with even kernel lengths"
-)
-warnings.filterwarnings("ignore", message="Unigrams not provided")
-warnings.filterwarnings("ignore", message="No known unigrams provided")
+for msg in [
+    "Using padding='same' with even kernel lengths",
+    "Unigrams not provided",
+    "No known unigrams provided",
+]:
+    warnings.filterwarnings("ignore", message=msg)
 
 from dotenv import load_dotenv  # noqa: E402
 import huggingface_hub  # noqa: E402
@@ -28,33 +29,55 @@ DEVICE = (
     if torch.cuda.is_available()
     else "cpu"
 )
+DTYPE = torch.float16 if DEVICE == "cuda" else torch.float32
+
+
+def _patch_feature_extractor(feature_extractor):
+    """Work around transformers 5.2.0 bug that passes an extra `center` arg
+    to _torch_extract_fbank_features (huggingface/transformers#38341)."""
+    original = feature_extractor._torch_extract_fbank_features
+
+    def _patched(waveform, device="cpu", center=None):
+        return original(waveform, device)
+
+    feature_extractor._torch_extract_fbank_features = _patched
 
 
 @st.cache_resource
 def load_model():
     processor = AutoProcessor.from_pretrained(MODEL_ID)
-    model = AutoModelForCTC.from_pretrained(MODEL_ID).to(DEVICE).eval()
+    _patch_feature_extractor(processor.feature_extractor)
+    model = (
+        AutoModelForCTC.from_pretrained(MODEL_ID, torch_dtype=DTYPE).to(DEVICE).eval()
+    )
+    if DEVICE == "cuda":
+        model = torch.compile(model)
     lm_path = huggingface_hub.hf_hub_download(MODEL_ID, filename="lm_6.kenlm")
     tokenizer = processor.tokenizer
     vocab = [""] * tokenizer.vocab_size
     for token, idx in tokenizer.vocab.items():
-        if idx < tokenizer.vocab_size and idx > 0:
-            if token.startswith("<") and token.endswith(">"):
-                vocab[idx] = token
-            else:
-                vocab[idx] = "▁" + token.replace("▁", "#")
+        if 0 < idx < tokenizer.vocab_size:
+            vocab[idx] = (
+                token
+                if token.startswith("<") and token.endswith(">")
+                else "▁" + token.replace("▁", "#")
+            )
     decoder = pyctcdecode.build_ctcdecoder(vocab, lm_path)
     return processor, model, decoder
 
 
+_CLEANUP = str.maketrans({" ": "", "#": " "})
+
+
 def transcribe(audio_bytes: bytes, processor, model, decoder) -> str:
     speech, _ = librosa.load(io.BytesIO(audio_bytes), sr=16000)
-    inputs = processor(speech, sampling_rate=16000).to(DEVICE)
+    inputs = processor(speech, sampling_rate=16000, return_tensors="pt")
+    inputs = inputs.to(device=DEVICE, dtype=DTYPE)
     with torch.inference_mode():
         logits = model(**inputs).logits
-    log_probs = logits.log_softmax(dim=-1).cpu().numpy()[0]
+    log_probs = logits.log_softmax(dim=-1).cpu().float().numpy()[0]
     text = decoder.decode_beams(log_probs, beam_width=8)[0][0]
-    return text.replace(" ", "").replace("#", " ").replace("</s>", "").strip()
+    return text.translate(_CLEANUP).replace("</s>", "").strip()
 
 
 def _wer_label(wer: float) -> str:
