@@ -140,7 +140,7 @@ def audio_tab(audio_data, key: str):
         st.audio(audio_data)
 
     # Clear stale results when audio changes
-    audio_id = id(audio_data) if audio_data is not None else None
+    audio_id = audio_data.size if audio_data is not None else None
     if st.session_state.get(f"audio_id_{key}") != audio_id:
         st.session_state[f"audio_id_{key}"] = audio_id
         st.session_state.pop(f"text_{key}", None)
