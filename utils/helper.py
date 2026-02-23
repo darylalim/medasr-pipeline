@@ -1,3 +1,4 @@
+import html
 import re
 
 import jiwer
@@ -25,36 +26,7 @@ def compute_wer(ref_text: str, hyp_text: str) -> dict:
     }
 
 
-def colored_diff(ref_text: str, hyp_text: str) -> str:
-    ref_words = normalize(ref_text).split()
-    hyp_words = normalize(hyp_text).split()
-    edits = Levenshtein.editops(ref_words, hyp_words)
-
-    r = 0
-    parts = []
-
-    for op, i, j in edits:
-        if r < i:
-            parts.append(" ".join(ref_words[r:i]))
-        r = i
-
-        if op == "replace":
-            parts.append(f"\033[91m{{-{ref_words[i]}-}}\033[0m")
-            parts.append(f"\033[92m{{+{hyp_words[j]}+}}\033[0m")
-            r += 1
-        elif op == "insert":
-            parts.append(f"\033[92m{{+{hyp_words[j]}+}}\033[0m")
-        elif op == "delete":
-            parts.append(f"\033[91m{{-{ref_words[i]}-}}\033[0m")
-            r += 1
-
-    if r < len(ref_words):
-        parts.append(" ".join(ref_words[r:]))
-
-    return " ".join(parts)
-
-
-def html_diff(ref_text: str, hyp_text: str) -> str:
+def _diff_parts(ref_text, hyp_text, fmt_replace, fmt_insert, fmt_delete):
     ref_words = normalize(ref_text).split()
     hyp_words = normalize(hyp_text).split()
     edits = Levenshtein.editops(ref_words, hyp_words)
@@ -68,27 +40,48 @@ def html_diff(ref_text: str, hyp_text: str) -> str:
         r = i
 
         if op == "replace":
-            parts.append(
-                f'<span style="color:red;text-decoration:line-through">{ref_words[i]}</span>'
-            )
-            parts.append(
-                f'<span style="color:green;font-weight:bold">{hyp_words[j]}</span>'
-            )
+            parts.extend(fmt_replace(ref_words[i], hyp_words[j]))
             r += 1
         elif op == "insert":
-            parts.append(
-                f'<span style="color:green;font-weight:bold">{hyp_words[j]}</span>'
-            )
+            parts.append(fmt_insert(hyp_words[j]))
         elif op == "delete":
-            parts.append(
-                f'<span style="color:red;text-decoration:line-through">{ref_words[i]}</span>'
-            )
+            parts.append(fmt_delete(ref_words[i]))
             r += 1
 
     if r < len(ref_words):
         parts.append(" ".join(ref_words[r:]))
 
     return " ".join(parts)
+
+
+def colored_diff(ref_text: str, hyp_text: str) -> str:
+    return _diff_parts(
+        ref_text,
+        hyp_text,
+        fmt_replace=lambda ref, hyp: [
+            f"\033[91m{{-{ref}-}}\033[0m",
+            f"\033[92m{{+{hyp}+}}\033[0m",
+        ],
+        fmt_insert=lambda hyp: f"\033[92m{{+{hyp}+}}\033[0m",
+        fmt_delete=lambda ref: f"\033[91m{{-{ref}-}}\033[0m",
+    )
+
+
+def html_diff(ref_text: str, hyp_text: str) -> str:
+    return _diff_parts(
+        ref_text,
+        hyp_text,
+        fmt_replace=lambda ref, hyp: [
+            f'<span style="color:red;text-decoration:line-through">{html.escape(ref)}</span>',
+            f'<span style="color:green;font-weight:bold">{html.escape(hyp)}</span>',
+        ],
+        fmt_insert=lambda hyp: (
+            f'<span style="color:green;font-weight:bold">{html.escape(hyp)}</span>'
+        ),
+        fmt_delete=lambda ref: (
+            f'<span style="color:red;text-decoration:line-through">{html.escape(ref)}</span>'
+        ),
+    )
 
 
 def evaluate(ref_text: str, hyp_text: str) -> None:

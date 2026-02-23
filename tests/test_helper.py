@@ -71,6 +71,17 @@ class TestColoredDiff:
         result = colored_diff("the big cat", "the cat")
         assert "{-big-}" in result
 
+    def test_empty_strings(self):
+        assert colored_diff("", "") == ""
+
+    def test_empty_ref(self):
+        result = colored_diff("", "hello")
+        assert "{+hello+}" in result
+
+    def test_empty_hyp(self):
+        result = colored_diff("hello", "")
+        assert "{-hello-}" in result
+
 
 class TestHtmlDiff:
     def test_identical_texts(self):
@@ -80,10 +91,10 @@ class TestHtmlDiff:
 
     def test_substitution(self):
         result = html_diff("the cat sat", "the dog sat")
-        assert "line-through" in result
-        assert "cat" in result
-        assert "font-weight:bold" in result
-        assert "dog" in result
+        assert (
+            '<span style="color:red;text-decoration:line-through">cat</span>' in result
+        )
+        assert '<span style="color:green;font-weight:bold">dog</span>' in result
 
     def test_insertion(self):
         result = html_diff("the cat", "the big cat")
@@ -98,6 +109,24 @@ class TestHtmlDiff:
     def test_returns_string(self):
         result = html_diff("hello", "world")
         assert isinstance(result, str)
+
+    def test_substitution_order(self):
+        result = html_diff("the cat sat", "the dog sat")
+        assert result.index("line-through") < result.index("font-weight:bold")
+
+    def test_empty_strings(self):
+        assert html_diff("", "") == ""
+
+    def test_empty_ref(self):
+        result = html_diff("", "hello")
+        assert '<span style="color:green;font-weight:bold">hello</span>' in result
+
+    def test_empty_hyp(self):
+        result = html_diff("hello", "")
+        assert (
+            '<span style="color:red;text-decoration:line-through">hello</span>'
+            in result
+        )
 
 
 class TestEvaluate:
