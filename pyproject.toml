@@ -1,0 +1,26 @@
+[project]
+name = "medasr-pipeline"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "huggingface-hub",
+    "jiwer",
+    "kenlm",
+    "levenshtein",
+    "librosa",
+    "pyctcdecode",
+    "python-dotenv",
+    "streamlit",
+    "torch",
+    "transformers",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+    "ty",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
