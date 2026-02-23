@@ -1,4 +1,4 @@
-from utils.helper import normalize, compute_wer, colored_diff, evaluate
+from utils.helper import normalize, compute_wer, colored_diff, html_diff, evaluate
 
 
 class TestNormalize:
@@ -70,6 +70,34 @@ class TestColoredDiff:
     def test_deletion_marker(self):
         result = colored_diff("the big cat", "the cat")
         assert "{-big-}" in result
+
+
+class TestHtmlDiff:
+    def test_identical_texts(self):
+        result = html_diff("hello world", "hello world")
+        assert "<span" not in result
+        assert "hello world" in result
+
+    def test_substitution(self):
+        result = html_diff("the cat sat", "the dog sat")
+        assert "line-through" in result
+        assert "cat" in result
+        assert "font-weight:bold" in result
+        assert "dog" in result
+
+    def test_insertion(self):
+        result = html_diff("the cat", "the big cat")
+        assert '<span style="color:green;font-weight:bold">big</span>' in result
+
+    def test_deletion(self):
+        result = html_diff("the big cat", "the cat")
+        assert (
+            '<span style="color:red;text-decoration:line-through">big</span>' in result
+        )
+
+    def test_returns_string(self):
+        result = html_diff("hello", "world")
+        assert isinstance(result, str)
 
 
 class TestEvaluate:

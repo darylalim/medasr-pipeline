@@ -54,6 +54,43 @@ def colored_diff(ref_text: str, hyp_text: str) -> str:
     return " ".join(parts)
 
 
+def html_diff(ref_text: str, hyp_text: str) -> str:
+    ref_words = normalize(ref_text).split()
+    hyp_words = normalize(hyp_text).split()
+    edits = Levenshtein.editops(ref_words, hyp_words)
+
+    r = 0
+    parts: list[str] = []
+
+    for op, i, j in edits:
+        if r < i:
+            parts.append(" ".join(ref_words[r:i]))
+        r = i
+
+        if op == "replace":
+            parts.append(
+                f'<span style="color:red;text-decoration:line-through">{ref_words[i]}</span>'
+            )
+            parts.append(
+                f'<span style="color:green;font-weight:bold">{hyp_words[j]}</span>'
+            )
+            r += 1
+        elif op == "insert":
+            parts.append(
+                f'<span style="color:green;font-weight:bold">{hyp_words[j]}</span>'
+            )
+        elif op == "delete":
+            parts.append(
+                f'<span style="color:red;text-decoration:line-through">{ref_words[i]}</span>'
+            )
+            r += 1
+
+    if r < len(ref_words):
+        parts.append(" ".join(ref_words[r:]))
+
+    return " ".join(parts)
+
+
 def evaluate(ref_text: str, hyp_text: str) -> None:
     print("HYP:", hyp_text)
     wer_result = compute_wer(ref_text, hyp_text)

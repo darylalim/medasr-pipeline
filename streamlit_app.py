@@ -16,7 +16,7 @@ import streamlit as st  # noqa: E402
 import torch  # noqa: E402
 from transformers import AutoModelForCTC, AutoProcessor  # noqa: E402
 
-from utils.helper import compute_wer  # noqa: E402
+from utils.helper import compute_wer, html_diff  # noqa: E402
 
 load_dotenv()
 
@@ -57,6 +57,16 @@ def transcribe(audio_bytes: bytes, processor, model, decoder) -> str:
     return text.replace(" ", "").replace("#", " ").replace("</s>", "").strip()
 
 
+def _wer_label(wer: float) -> str:
+    if wer < 0.05:
+        return "Excellent"
+    if wer < 0.15:
+        return "Good"
+    if wer < 0.30:
+        return "Fair"
+    return "Poor"
+
+
 def show_results(text: str, ref_text: str, key: str):
     st.subheader("Transcription")
     st.text_area("Result", value=text, height=200, key=f"result_{key}")
@@ -66,19 +76,24 @@ def show_results(text: str, ref_text: str, key: str):
         metrics = compute_wer(ref_text, text)
         result["reference"] = ref_text
         result["metrics"] = metrics
+        ref_tokens = metrics["ref_tokens"]
+
         st.subheader("Evaluation Metrics")
         cols = st.columns(4)
-        for col, (label, field) in zip(
-            cols,
-            [
-                ("WER", "wer"),
-                ("Insertions", "insertions"),
-                ("Deletions", "deletions"),
-                ("Substitutions", "substitutions"),
-            ],
-        ):
-            value = f"{metrics[field] * 100:.2f}%" if field == "wer" else metrics[field]
-            col.metric(label, value)
+        cols[0].metric(
+            "WER",
+            f"{metrics['wer'] * 100:.2f}%",
+            delta=_wer_label(metrics["wer"]),
+            delta_color="off",
+        )
+        cols[1].metric("Insertions", f"{metrics['insertions']} of {ref_tokens} words")
+        cols[2].metric("Deletions", f"{metrics['deletions']} of {ref_tokens} words")
+        cols[3].metric(
+            "Substitutions", f"{metrics['substitutions']} of {ref_tokens} words"
+        )
+
+        st.subheader("Word-Level Diff")
+        st.markdown(html_diff(ref_text, text), unsafe_allow_html=True)
 
     st.download_button(
         "Download JSON",
@@ -90,20 +105,38 @@ def show_results(text: str, ref_text: str, key: str):
 
 
 def audio_tab(audio_data, key: str):
-    ref = st.text_area(
-        "Reference transcript (optional)",
-        key=f"ref_{key}",
-        height=100,
-        help="Paste the expected ground truth text to compute word error rate (WER) metrics against the transcription.",
-    )
+    with st.expander("Compare against reference transcript"):
+        ref = st.text_area(
+            "Reference transcript (optional)",
+            key=f"ref_{key}",
+            height=100,
+            help="Paste the expected ground truth text to compute word error rate (WER) metrics against the transcription.",
+        )
+
     if audio_data is not None:
         st.audio(audio_data)
-        if st.button("Transcribe", key=f"transcribe_{key}"):
-            with st.spinner("Transcribing..."):
-                text = transcribe(audio_data.getvalue(), *load_model())
-            show_results(text, ref, key)
+
+    # Clear stale results when audio changes
+    audio_id = id(audio_data) if audio_data is not None else None
+    if st.session_state.get(f"audio_id_{key}") != audio_id:
+        st.session_state[f"audio_id_{key}"] = audio_id
+        st.session_state.pop(f"text_{key}", None)
+
+    if st.button("Transcribe", key=f"transcribe_{key}", disabled=(audio_data is None)):
+        with st.status("Transcribing...", expanded=True) as status:
+            st.write("Loading model...")
+            processor, model, decoder = load_model()
+            st.write("Transcribing audio...")
+            text = transcribe(audio_data.getvalue(), processor, model, decoder)
+            status.update(label="Complete!", state="complete", expanded=False)
+        st.session_state[f"text_{key}"] = text
+        st.toast("Transcription complete!")
+
+    if f"text_{key}" in st.session_state:
+        show_results(st.session_state[f"text_{key}"], ref, key)
 
 
+st.set_page_config(page_title="MedASR", page_icon="\U0001fa7a", layout="centered")
 st.title("Medical Dictation Transcription")
 st.write("Transcribe medical dictation using Google's MedASR model.")
 
