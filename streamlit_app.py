@@ -159,7 +159,6 @@ def audio_tab(audio_data, key: str):
 
 st.set_page_config(page_title="MedASR", page_icon="\U0001fa7a", layout="centered")
 st.title("Medical Dictation Transcription")
-st.write("Transcribe medical dictation using Google's MedASR model.")
 
 tab_upload, tab_record = st.tabs(["Upload Audio", "Record Audio"])
 with tab_upload:
