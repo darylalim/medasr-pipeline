@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import torch
 
-from streamlit_app import transcribe, _wer_label
+from streamlit_app import transcribe, _wer_label, audio_tab, show_results
 
 
 class TestWerLabel:
@@ -88,3 +88,113 @@ class TestTranscribe:
         transcribe(b"fake_audio", processor, model, decoder)
         _, kwargs = processor.call_args
         assert kwargs["return_tensors"] == "pt"
+
+
+class TestAudioTabFileUpload:
+    def _setup_st(self, mock_st, ref_file, text_area_value, key="upload"):
+        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.file_uploader.return_value = ref_file
+        mock_st.text_area.return_value = text_area_value
+        mock_st.button.return_value = False
+        audio_data = MagicMock()
+        audio_data.size = 100
+        mock_st.session_state = {
+            f"audio_id_{key}": 100,
+            f"text_{key}": "transcribed text",
+        }
+        return audio_data
+
+    @patch("streamlit_app.show_results")
+    @patch("streamlit_app.st")
+    def test_file_upload_overrides_text_area(self, mock_st, mock_show_results):
+        ref_file = MagicMock()
+        ref_file.getvalue.return_value = b"reference from file"
+        audio_data = self._setup_st(mock_st, ref_file, "typed text")
+
+        audio_tab(audio_data, "upload")
+
+        mock_show_results.assert_called_once_with(
+            "transcribed text", "reference from file", "upload"
+        )
+
+    @patch("streamlit_app.show_results")
+    @patch("streamlit_app.st")
+    def test_text_area_used_when_no_file(self, mock_st, mock_show_results):
+        audio_data = self._setup_st(mock_st, None, "typed reference")
+
+        audio_tab(audio_data, "upload")
+
+        mock_show_results.assert_called_once_with(
+            "transcribed text", "typed reference", "upload"
+        )
+
+    @patch("streamlit_app.show_results")
+    @patch("streamlit_app.st")
+    def test_empty_file_treated_as_no_reference(self, mock_st, mock_show_results):
+        ref_file = MagicMock()
+        ref_file.getvalue.return_value = b""
+        audio_data = self._setup_st(mock_st, ref_file, "")
+
+        audio_tab(audio_data, "upload")
+
+        mock_show_results.assert_called_once_with("transcribed text", "", "upload")
+
+    @patch("streamlit_app.show_results")
+    @patch("streamlit_app.st")
+    def test_non_utf8_file_shows_error(self, mock_st, mock_show_results):
+        ref_file = MagicMock()
+        ref_file.getvalue.return_value = b"\xff\xfe"
+        audio_data = self._setup_st(mock_st, ref_file, "")
+
+        audio_tab(audio_data, "upload")
+
+        mock_st.error.assert_called_once()
+        mock_show_results.assert_called_once_with("transcribed text", "", "upload")
+
+
+class TestShowResults:
+    @patch("streamlit_app.st")
+    def test_uses_two_column_layout(self, mock_st):
+        col_wer = MagicMock()
+        col_breakdown = MagicMock()
+        mock_st.columns.return_value = [col_wer, col_breakdown]
+
+        show_results("hello world", "hello world", "test")
+
+        mock_st.columns.assert_called_once_with(2)
+
+    @patch("streamlit_app.st")
+    def test_wer_metric_in_left_column(self, mock_st):
+        col_wer = MagicMock()
+        col_breakdown = MagicMock()
+        mock_st.columns.return_value = [col_wer, col_breakdown]
+
+        show_results("hello world", "hello world", "test")
+
+        col_wer.metric.assert_called_once()
+        args, kwargs = col_wer.metric.call_args
+        assert args[0] == "WER"
+        assert args[1] == "0.00%"
+        assert kwargs["delta"] == "Excellent"
+
+    @patch("streamlit_app.st")
+    def test_dataframe_in_right_column(self, mock_st):
+        col_wer = MagicMock()
+        col_breakdown = MagicMock()
+        mock_st.columns.return_value = [col_wer, col_breakdown]
+
+        show_results("the cat sat", "the dog sat", "test")
+
+        col_breakdown.dataframe.assert_called_once()
+        data = col_breakdown.dataframe.call_args[0][0]
+        assert data["Type"] == ["Insertions", "Deletions", "Substitutions"]
+        assert data["Count"] == [0, 0, 1]
+        kwargs = col_breakdown.dataframe.call_args[1]
+        assert kwargs["width"] == "stretch"
+
+    @patch("streamlit_app.st")
+    def test_no_metrics_without_reference(self, mock_st):
+        show_results("hello world", "", "test")
+
+        mock_st.columns.assert_not_called()
