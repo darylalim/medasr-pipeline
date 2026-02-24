@@ -47,9 +47,7 @@ def _patch_feature_extractor(feature_extractor):
 def load_model():
     processor = AutoProcessor.from_pretrained(MODEL_ID)
     _patch_feature_extractor(processor.feature_extractor)
-    model = (
-        AutoModelForCTC.from_pretrained(MODEL_ID, torch_dtype=DTYPE).to(DEVICE).eval()
-    )
+    model = AutoModelForCTC.from_pretrained(MODEL_ID, dtype=DTYPE).to(DEVICE).eval()
     if DEVICE == "cuda":
         model = torch.compile(model)
     lm_path = huggingface_hub.hf_hub_download(MODEL_ID, filename="lm_6.kenlm")
