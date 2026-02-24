@@ -100,17 +100,25 @@ def show_results(text: str, ref_text: str, key: str):
         ref_tokens = metrics["ref_tokens"]
 
         st.subheader("Evaluation Metrics")
-        cols = st.columns(4)
-        cols[0].metric(
+        col_wer, col_breakdown = st.columns(2)
+        col_wer.metric(
             "WER",
             f"{metrics['wer'] * 100:.2f}%",
             delta=_wer_label(metrics["wer"]),
             delta_color="off",
         )
-        cols[1].metric("Insertions", f"{metrics['insertions']} of {ref_tokens} words")
-        cols[2].metric("Deletions", f"{metrics['deletions']} of {ref_tokens} words")
-        cols[3].metric(
-            "Substitutions", f"{metrics['substitutions']} of {ref_tokens} words"
+        col_breakdown.dataframe(
+            {
+                "Type": ["Insertions", "Deletions", "Substitutions"],
+                "Count": [
+                    metrics["insertions"],
+                    metrics["deletions"],
+                    metrics["substitutions"],
+                ],
+                "Reference Words": [ref_tokens] * 3,
+            },
+            hide_index=True,
+            width="stretch",
         )
 
         st.subheader("Word-Level Diff")
