@@ -7,6 +7,7 @@ Medical dictation transcription using Google's MedASR speech-to-text model.
 - Upload audio files (wav, mp3, flac, ogg, webm, m4a) or record live
 - CTC beam search decoding with kenlm language model
 - WER evaluation metrics with qualitative labels and HTML word diff
+- Reference transcript input via text area or UTF-8 `.txt` file upload
 - Session state persistence — results survive widget interactions
 - Status feedback during model loading and transcription
 - JSON download of transcription results

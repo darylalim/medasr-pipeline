@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Streamlit web app for medical dictation transcription using Google's MedASR model (`google/medasr`). Supports audio upload and live recording with CTC beam search decoding. Optionally computes WER metrics against a reference transcript and offers JSON download of results.
+Streamlit web app for medical dictation transcription using Google's MedASR model (`google/medasr`). Supports audio upload and live recording with CTC beam search decoding. Optionally computes WER metrics against a reference transcript (pasted or uploaded as a `.txt` file) and offers JSON download of results.
 
 ## Commands
 
@@ -21,10 +21,10 @@ uv run ty check                        # Type check
 
 Audio input → librosa (16kHz) → AutoProcessor → model logits → log softmax → CTC beam search (kenlm, beam width 8) → transcribed text
 
-- `streamlit_app.py` — Main app with model caching (`@st.cache_resource`), auto device detection (MPS > CUDA > CPU), custom CTC decoder, session state persistence, status feedback, qualitative WER metrics with HTML word diff, and JSON download
+- `streamlit_app.py` — Main app with model caching (`@st.cache_resource`), auto device detection (MPS > CUDA > CPU), custom CTC decoder, session state persistence, status feedback, WER metrics (metric + dataframe layout) with HTML word diff, reference transcript file upload (UTF-8 validated), and JSON download
 - `utils/helper.py` — Text normalization, WER computation (jiwer), colored diff output (ANSI and HTML)
 - `tests/test_helper.py` — Unit tests for helper utilities (normalize, compute_wer, colored_diff, html_diff, evaluate)
-- `tests/test_app.py` — Unit tests for transcribe and _wer_label with mocked model/audio
+- `tests/test_app.py` — Unit tests for transcribe, _wer_label, audio_tab file upload (including empty and non-UTF-8 edge cases), and show_results layout with mocked model/audio/Streamlit
 - `tests/data/` — Sample audio and reference transcripts
 
 ## Notes
