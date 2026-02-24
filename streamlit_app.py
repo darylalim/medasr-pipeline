@@ -135,12 +135,27 @@ def show_results(text: str, ref_text: str, key: str):
 
 def audio_tab(audio_data, key: str):
     with st.expander("Compare against reference transcript"):
+        ref_file = st.file_uploader(
+            "Upload reference transcript",
+            type=["txt"],
+            key=f"ref_file_{key}",
+        )
         ref = st.text_area(
-            "Reference transcript (optional)",
+            "Or paste reference transcript",
             key=f"ref_{key}",
             height=100,
             help="Paste the expected ground truth text to compute word error rate (WER) metrics against the transcription.",
         )
+        if ref_file is not None:
+            try:
+                ref = ref_file.getvalue().decode("utf-8")
+                if ref.strip():
+                    st.caption("Using uploaded file.")
+            except UnicodeDecodeError:
+                st.error(
+                    "Could not read file. Please upload a UTF-8 encoded text file."
+                )
+                ref = ""
 
     if audio_data is not None:
         st.audio(audio_data)
