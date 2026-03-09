@@ -11,6 +11,7 @@ from streamlit_app import (
     show_results,
     _match_refs,
     _aggregate_wer,
+    batch_tab,
 )
 
 
@@ -423,3 +424,93 @@ class TestAggregateWer:
             {"filename": "no_ref.wav", "transcription": "hello"},
         ]
         assert _aggregate_wer(results) == 2 / 10
+
+
+class TestBatchTab:
+    @patch("streamlit_app.transcribe")
+    @patch("streamlit_app.load_model")
+    @patch("streamlit_app.st")
+    def test_transcribes_all_files(self, mock_st, mock_load_model, mock_transcribe):
+        mock_load_model.return_value = (MagicMock(), MagicMock(), MagicMock())
+        mock_transcribe.side_effect = ["text one", "text two"]
+
+        audio1 = MagicMock(name="file1.wav")
+        audio1.name = "file1.wav"
+        audio1.getvalue.return_value = b"audio1"
+        audio2 = MagicMock(name="file2.wav")
+        audio2.name = "file2.wav"
+        audio2.getvalue.return_value = b"audio2"
+
+        mock_st.file_uploader.side_effect = [[audio1, audio2], []]
+        mock_st.button.return_value = True
+        mock_st.status.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_st.status.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.session_state = {}
+
+        batch_tab()
+
+        assert mock_transcribe.call_count == 2
+        results = mock_st.session_state["batch_results"]
+        assert len(results) == 2
+        assert results[0]["filename"] == "file1.wav"
+        assert results[0]["transcription"] == "text one"
+
+    @patch("streamlit_app.st")
+    def test_no_results_without_click(self, mock_st):
+        mock_st.file_uploader.side_effect = [[], []]
+        mock_st.button.return_value = False
+        mock_st.session_state = {}
+
+        batch_tab()
+
+        mock_st.dataframe.assert_not_called()
+        mock_st.download_button.assert_not_called()
+
+    @patch("streamlit_app.st")
+    def test_displays_stored_results(self, mock_st):
+        mock_st.file_uploader.side_effect = [[], []]
+        mock_st.button.return_value = False
+        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.session_state = {
+            "batch_results": [
+                {"filename": "test.wav", "transcription": "hello"},
+            ]
+        }
+
+        batch_tab()
+
+        mock_st.dataframe.assert_called_once()
+        mock_st.download_button.assert_called_once()
+
+    @patch("streamlit_app.transcribe")
+    @patch("streamlit_app.load_model")
+    @patch("streamlit_app.st")
+    def test_computes_wer_when_ref_matched(
+        self, mock_st, mock_load_model, mock_transcribe
+    ):
+        mock_load_model.return_value = (MagicMock(), MagicMock(), MagicMock())
+        mock_transcribe.return_value = "hello world"
+
+        audio = MagicMock()
+        audio.name = "clip.wav"
+        audio.getvalue.return_value = b"audio"
+        ref = MagicMock()
+        ref.name = "clip.txt"
+        ref.getvalue.return_value = b"hello world"
+
+        mock_st.file_uploader.side_effect = [[audio], [ref]]
+        mock_st.button.return_value = True
+        mock_st.status.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_st.status.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.session_state = {}
+
+        batch_tab()
+
+        results = mock_st.session_state["batch_results"]
+        assert "metrics" in results[0]
+        assert results[0]["metrics"]["wer"] == 0.0

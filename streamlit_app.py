@@ -249,10 +249,113 @@ def _aggregate_wer(results):
     return total_edits / total_ref_tokens
 
 
+def batch_tab():
+    audio_files = st.file_uploader(
+        "Upload audio files",
+        type=["wav", "mp3", "flac", "ogg", "webm", "m4a"],
+        accept_multiple_files=True,
+        key="batch_audio",
+    )
+    ref_files = st.file_uploader(
+        "Upload reference transcripts",
+        type=["txt"],
+        accept_multiple_files=True,
+        key="batch_ref",
+        help="Match audio files by filename: patient1.wav \u2194 patient1.txt",
+    )
+
+    if st.button("Transcribe All", key="batch_transcribe", disabled=not audio_files):
+        ref_map, ref_errors = _match_refs(ref_files)
+        for name in ref_errors:
+            st.warning(f"Skipping {name}: not a UTF-8 text file.")
+
+        with st.status("Transcribing...", expanded=True) as status:
+            st.write("Loading model...")
+            processor, model, decoder = load_model()
+            results = []
+            progress = st.progress(0)
+            for i, audio_file in enumerate(audio_files):
+                st.write(f"Transcribing {audio_file.name}...")
+                text = transcribe(audio_file.getvalue(), processor, model, decoder)
+                stem = Path(audio_file.name).stem
+                ref = ref_map.get(stem, "")
+
+                entry = {"filename": audio_file.name, "transcription": text}
+                if ref.strip():
+                    metrics = compute_wer(ref, text)
+                    entry["reference"] = ref
+                    entry["metrics"] = metrics
+                results.append(entry)
+                progress.progress((i + 1) / len(audio_files))
+            status.update(label="Complete!", state="complete", expanded=False)
+
+        st.session_state["batch_results"] = results
+        st.toast("Batch transcription complete!")
+
+    if "batch_results" in st.session_state:
+        results = st.session_state["batch_results"]
+
+        st.subheader("Results")
+        rows = []
+        for r in results:
+            m = r.get("metrics")
+            rows.append(
+                {
+                    "Filename": r["filename"],
+                    "WER": f"{m['wer'] * 100:.2f}%" if m else "N/A",
+                    "Insertions": m["insertions"] if m else "",
+                    "Deletions": m["deletions"] if m else "",
+                    "Substitutions": m["substitutions"] if m else "",
+                }
+            )
+
+        agg = _aggregate_wer(results)
+        if agg is not None:
+            total_ins = sum(
+                r["metrics"]["insertions"] for r in results if "metrics" in r
+            )
+            total_del = sum(
+                r["metrics"]["deletions"] for r in results if "metrics" in r
+            )
+            total_sub = sum(
+                r["metrics"]["substitutions"] for r in results if "metrics" in r
+            )
+            rows.append(
+                {
+                    "Filename": "AGGREGATE",
+                    "WER": f"{agg * 100:.2f}%",
+                    "Insertions": total_ins,
+                    "Deletions": total_del,
+                    "Substitutions": total_sub,
+                }
+            )
+
+        st.dataframe(rows, hide_index=True)
+
+        for r in results:
+            with st.expander(r["filename"]):
+                st.code(r["transcription"], language=None)
+                if "reference" in r:
+                    st.markdown(
+                        html_diff(r["reference"], r["transcription"]),
+                        unsafe_allow_html=True,
+                    )
+
+        st.download_button(
+            "Download All JSON",
+            json.dumps(results, indent=2),
+            "batch_results.json",
+            "application/json",
+            key="batch_dl",
+        )
+
+
 st.set_page_config(page_title="MedASR", page_icon="\U0001fa7a", layout="centered")
 st.title("Medical Dictation Transcription")
 
-tab_upload, tab_record = st.tabs(["Upload Audio", "Record Audio"])
+tab_upload, tab_record, tab_batch = st.tabs(
+    ["Upload Audio", "Record Audio", "Batch Evaluate"]
+)
 with tab_upload:
     audio_tab(
         st.file_uploader(
@@ -262,3 +365,5 @@ with tab_upload:
     )
 with tab_record:
     audio_tab(st.audio_input("Record audio"), "record")
+with tab_batch:
+    batch_tab()
