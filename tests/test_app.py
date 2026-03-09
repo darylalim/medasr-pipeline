@@ -1,3 +1,4 @@
+import json
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -156,6 +157,7 @@ class TestAudioTabFileUpload:
 class TestShowResults:
     @patch("streamlit_app.st")
     def test_uses_two_column_layout(self, mock_st):
+        mock_st.text_area.return_value = "hello world"
         col_wer = MagicMock()
         col_breakdown = MagicMock()
         mock_st.columns.return_value = [col_wer, col_breakdown]
@@ -166,6 +168,7 @@ class TestShowResults:
 
     @patch("streamlit_app.st")
     def test_wer_metric_in_left_column(self, mock_st):
+        mock_st.text_area.return_value = "hello world"
         col_wer = MagicMock()
         col_breakdown = MagicMock()
         mock_st.columns.return_value = [col_wer, col_breakdown]
@@ -180,6 +183,7 @@ class TestShowResults:
 
     @patch("streamlit_app.st")
     def test_dataframe_in_right_column(self, mock_st):
+        mock_st.text_area.return_value = "the cat sat"
         col_wer = MagicMock()
         col_breakdown = MagicMock()
         mock_st.columns.return_value = [col_wer, col_breakdown]
@@ -195,6 +199,38 @@ class TestShowResults:
 
     @patch("streamlit_app.st")
     def test_no_metrics_without_reference(self, mock_st):
+        mock_st.text_area.return_value = "hello world"
         show_results("hello world", "", "test")
 
         mock_st.columns.assert_not_called()
+
+    @patch("streamlit_app.st")
+    def test_uses_st_code_for_transcription(self, mock_st):
+        mock_st.text_area.return_value = "hello world"
+        show_results("hello world", "", "test")
+        mock_st.code.assert_called_once_with("hello world", language=None)
+
+    @patch("streamlit_app.st")
+    def test_corrected_transcript_shown(self, mock_st):
+        mock_st.text_area.return_value = "hello world"
+        show_results("hello world", "", "test")
+        mock_st.text_area.assert_called_once_with(
+            "Corrected transcript",
+            value="hello world",
+            height=200,
+            key="corrected_test",
+        )
+
+    @patch("streamlit_app.st")
+    def test_json_excludes_corrected_when_unchanged(self, mock_st):
+        mock_st.text_area.return_value = "hello world"
+        show_results("hello world", "", "test")
+        data = json.loads(mock_st.download_button.call_args[0][1])
+        assert "corrected_transcription" not in data
+
+    @patch("streamlit_app.st")
+    def test_json_includes_corrected_when_changed(self, mock_st):
+        mock_st.text_area.return_value = "corrected text"
+        show_results("hello world", "", "test")
+        data = json.loads(mock_st.download_button.call_args[0][1])
+        assert data["corrected_transcription"] == "corrected text"

@@ -90,9 +90,19 @@ def _wer_label(wer: float) -> str:
 
 def show_results(text: str, ref_text: str, key: str):
     st.subheader("Transcription")
-    st.text_area("Result", value=text, height=200, key=f"result_{key}")
+    st.code(text, language=None)
+
+    corrected = st.text_area(
+        "Corrected transcript",
+        value=text,
+        height=200,
+        key=f"corrected_{key}",
+    )
 
     result = {"transcription": text}
+    if corrected != text:
+        result["corrected_transcription"] = corrected
+
     if ref_text.strip():
         metrics = compute_wer(ref_text, text)
         result["reference"] = ref_text
