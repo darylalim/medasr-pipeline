@@ -224,6 +224,31 @@ def audio_tab(audio_data, key: str):
         show_results(st.session_state[f"text_{key}"], ref, key)
 
 
+def _match_refs(ref_files):
+    ref_map = {}
+    errors = []
+    for f in ref_files:
+        stem = Path(f.name).stem
+        try:
+            ref_map[stem] = f.getvalue().decode("utf-8")
+        except UnicodeDecodeError:
+            errors.append(f.name)
+    return ref_map, errors
+
+
+def _aggregate_wer(results):
+    total_edits = 0
+    total_ref_tokens = 0
+    for r in results:
+        if "metrics" in r:
+            m = r["metrics"]
+            total_edits += m["insertions"] + m["deletions"] + m["substitutions"]
+            total_ref_tokens += m["ref_tokens"]
+    if total_ref_tokens == 0:
+        return None
+    return total_edits / total_ref_tokens
+
+
 st.set_page_config(page_title="MedASR", page_icon="\U0001fa7a", layout="centered")
 st.title("Medical Dictation Transcription")
 

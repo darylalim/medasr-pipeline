@@ -4,7 +4,14 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import torch
 
-from streamlit_app import transcribe, _wer_label, audio_tab, show_results
+from streamlit_app import (
+    transcribe,
+    _wer_label,
+    audio_tab,
+    show_results,
+    _match_refs,
+    _aggregate_wer,
+)
 
 
 class TestWerLabel:
@@ -347,3 +354,72 @@ class TestShowResults:
         show_results("hello world", "", "test")
         data = json.loads(mock_st.download_button.call_args[0][1])
         assert data["corrected_transcription"] == "corrected text"
+
+
+class TestMatchRefs:
+    def test_matches_by_stem(self):
+        f1 = MagicMock()
+        f1.name = "patient1.txt"
+        f1.getvalue.return_value = b"reference text"
+
+        ref_map, errors = _match_refs([f1])
+        assert ref_map == {"patient1": "reference text"}
+        assert errors == []
+
+    def test_skips_non_utf8(self):
+        f1 = MagicMock()
+        f1.name = "bad.txt"
+        f1.getvalue.return_value = b"\xff\xfe"
+
+        ref_map, errors = _match_refs([f1])
+        assert ref_map == {}
+        assert errors == ["bad.txt"]
+
+    def test_empty_list(self):
+        ref_map, errors = _match_refs([])
+        assert ref_map == {}
+        assert errors == []
+
+
+class TestAggregateWer:
+    def test_basic_aggregation(self):
+        results = [
+            {
+                "metrics": {
+                    "insertions": 1,
+                    "deletions": 0,
+                    "substitutions": 0,
+                    "ref_tokens": 10,
+                    "wer": 0.1,
+                }
+            },
+            {
+                "metrics": {
+                    "insertions": 0,
+                    "deletions": 1,
+                    "substitutions": 1,
+                    "ref_tokens": 10,
+                    "wer": 0.2,
+                }
+            },
+        ]
+        assert _aggregate_wer(results) == 3 / 20
+
+    def test_no_metrics_returns_none(self):
+        results = [{"filename": "test.wav", "transcription": "hello"}]
+        assert _aggregate_wer(results) is None
+
+    def test_mixed_with_and_without_metrics(self):
+        results = [
+            {
+                "metrics": {
+                    "insertions": 2,
+                    "deletions": 0,
+                    "substitutions": 0,
+                    "ref_tokens": 10,
+                    "wer": 0.2,
+                }
+            },
+            {"filename": "no_ref.wav", "transcription": "hello"},
+        ]
+        assert _aggregate_wer(results) == 2 / 10
