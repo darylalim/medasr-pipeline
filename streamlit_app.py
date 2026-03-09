@@ -17,6 +17,8 @@ import streamlit as st  # noqa: E402
 import torch  # noqa: E402
 from transformers import AutoModelForCTC, AutoProcessor  # noqa: E402
 
+from pathlib import Path  # noqa: E402
+
 from utils.helper import compute_wer, html_diff  # noqa: E402
 
 load_dotenv()
@@ -30,6 +32,10 @@ DEVICE = (
     else "cpu"
 )
 DTYPE = torch.float16 if DEVICE == "cuda" else torch.float32
+
+SAMPLE_DIR = Path(__file__).parent / "samples"
+SAMPLE_AUDIO = SAMPLE_DIR / "sample_audio.wav"
+SAMPLE_REF = SAMPLE_DIR / "sample_transcript.txt"
 
 
 def _patch_feature_extractor(feature_extractor):
@@ -144,6 +150,19 @@ def show_results(text: str, ref_text: str, key: str):
 
 
 def audio_tab(audio_data, key: str):
+    if SAMPLE_AUDIO.exists():
+        if st.button("Try with sample", key=f"sample_{key}"):
+            with st.status("Transcribing sample...", expanded=True) as status:
+                st.write("Loading model...")
+                processor, model, decoder = load_model()
+                st.write("Transcribing audio...")
+                text = transcribe(SAMPLE_AUDIO.read_bytes(), processor, model, decoder)
+                status.update(label="Complete!", state="complete", expanded=False)
+            st.session_state[f"text_{key}"] = text
+            st.session_state[f"audio_id_{key}"] = "sample"
+            st.session_state[f"sample_ref_{key}"] = SAMPLE_REF.read_text()
+            st.toast("Transcription complete!")
+
     with st.expander("Compare against reference transcript"):
         ref_file = st.file_uploader(
             "Upload reference transcript",
@@ -167,14 +186,27 @@ def audio_tab(audio_data, key: str):
                 )
                 ref = ""
 
+    # Fallback to sample ref when no user-provided ref
+    if not ref.strip() and ref_file is None and f"sample_ref_{key}" in st.session_state:
+        ref = st.session_state[f"sample_ref_{key}"]
+
     if audio_data is not None:
         st.audio(audio_data)
+    elif st.session_state.get(f"audio_id_{key}") == "sample":
+        st.audio(SAMPLE_AUDIO.read_bytes(), format="audio/wav")
 
     # Clear stale results when audio changes
-    audio_id = audio_data.size if audio_data is not None else None
+    if audio_data is not None:
+        audio_id = audio_data.size
+    elif st.session_state.get(f"audio_id_{key}") == "sample":
+        audio_id = "sample"
+    else:
+        audio_id = None
+
     if st.session_state.get(f"audio_id_{key}") != audio_id:
         st.session_state[f"audio_id_{key}"] = audio_id
         st.session_state.pop(f"text_{key}", None)
+        st.session_state.pop(f"sample_ref_{key}", None)
 
     if st.button("Transcribe", key=f"transcribe_{key}", disabled=(audio_data is None)):
         with st.status("Transcribing...", expanded=True) as status:

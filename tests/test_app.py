@@ -92,7 +92,10 @@ class TestTranscribe:
 
 
 class TestAudioTabFileUpload:
-    def _setup_st(self, mock_st, ref_file, text_area_value, key="upload"):
+    def _setup_st(
+        self, mock_st, mock_sample_audio, ref_file, text_area_value, key="upload"
+    ):
+        mock_sample_audio.exists.return_value = False
         mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
         mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
         mock_st.file_uploader.return_value = ref_file
@@ -107,11 +110,14 @@ class TestAudioTabFileUpload:
         return audio_data
 
     @patch("streamlit_app.show_results")
+    @patch("streamlit_app.SAMPLE_AUDIO")
     @patch("streamlit_app.st")
-    def test_file_upload_overrides_text_area(self, mock_st, mock_show_results):
+    def test_file_upload_overrides_text_area(
+        self, mock_st, mock_sample_audio, mock_show_results
+    ):
         ref_file = MagicMock()
         ref_file.getvalue.return_value = b"reference from file"
-        audio_data = self._setup_st(mock_st, ref_file, "typed text")
+        audio_data = self._setup_st(mock_st, mock_sample_audio, ref_file, "typed text")
 
         audio_tab(audio_data, "upload")
 
@@ -120,9 +126,12 @@ class TestAudioTabFileUpload:
         )
 
     @patch("streamlit_app.show_results")
+    @patch("streamlit_app.SAMPLE_AUDIO")
     @patch("streamlit_app.st")
-    def test_text_area_used_when_no_file(self, mock_st, mock_show_results):
-        audio_data = self._setup_st(mock_st, None, "typed reference")
+    def test_text_area_used_when_no_file(
+        self, mock_st, mock_sample_audio, mock_show_results
+    ):
+        audio_data = self._setup_st(mock_st, mock_sample_audio, None, "typed reference")
 
         audio_tab(audio_data, "upload")
 
@@ -131,27 +140,131 @@ class TestAudioTabFileUpload:
         )
 
     @patch("streamlit_app.show_results")
+    @patch("streamlit_app.SAMPLE_AUDIO")
     @patch("streamlit_app.st")
-    def test_empty_file_treated_as_no_reference(self, mock_st, mock_show_results):
+    def test_empty_file_treated_as_no_reference(
+        self, mock_st, mock_sample_audio, mock_show_results
+    ):
         ref_file = MagicMock()
         ref_file.getvalue.return_value = b""
-        audio_data = self._setup_st(mock_st, ref_file, "")
+        audio_data = self._setup_st(mock_st, mock_sample_audio, ref_file, "")
 
         audio_tab(audio_data, "upload")
 
         mock_show_results.assert_called_once_with("transcribed text", "", "upload")
 
     @patch("streamlit_app.show_results")
+    @patch("streamlit_app.SAMPLE_AUDIO")
     @patch("streamlit_app.st")
-    def test_non_utf8_file_shows_error(self, mock_st, mock_show_results):
+    def test_non_utf8_file_shows_error(
+        self, mock_st, mock_sample_audio, mock_show_results
+    ):
         ref_file = MagicMock()
         ref_file.getvalue.return_value = b"\xff\xfe"
-        audio_data = self._setup_st(mock_st, ref_file, "")
+        audio_data = self._setup_st(mock_st, mock_sample_audio, ref_file, "")
 
         audio_tab(audio_data, "upload")
 
         mock_st.error.assert_called_once()
         mock_show_results.assert_called_once_with("transcribed text", "", "upload")
+
+
+class TestAudioTabSample:
+    @patch("streamlit_app.SAMPLE_AUDIO")
+    @patch("streamlit_app.st")
+    def test_sample_button_shown_when_files_exist(self, mock_st, mock_sample_audio):
+        mock_sample_audio.exists.return_value = True
+        mock_st.button.return_value = False
+        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.file_uploader.return_value = None
+        mock_st.text_area.return_value = ""
+        mock_st.session_state = {}
+
+        audio_tab(None, "upload")
+
+        # First button call is "Try with sample"
+        first_call = mock_st.button.call_args_list[0]
+        assert first_call[0][0] == "Try with sample"
+
+    @patch("streamlit_app.SAMPLE_AUDIO")
+    @patch("streamlit_app.st")
+    def test_sample_button_hidden_when_no_files(self, mock_st, mock_sample_audio):
+        mock_sample_audio.exists.return_value = False
+        mock_st.button.return_value = False
+        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.file_uploader.return_value = None
+        mock_st.text_area.return_value = ""
+        mock_st.session_state = {}
+
+        audio_tab(None, "upload")
+
+        # Only the Transcribe button, no sample button
+        assert mock_st.button.call_count == 1
+        assert mock_st.button.call_args[0][0] == "Transcribe"
+
+    @patch("streamlit_app.show_results")
+    @patch("streamlit_app.transcribe", return_value="sample transcription")
+    @patch(
+        "streamlit_app.load_model", return_value=(MagicMock(), MagicMock(), MagicMock())
+    )
+    @patch("streamlit_app.SAMPLE_REF")
+    @patch("streamlit_app.SAMPLE_AUDIO")
+    @patch("streamlit_app.st")
+    def test_sample_click_transcribes_and_stores(
+        self,
+        mock_st,
+        mock_sample_audio,
+        mock_sample_ref,
+        mock_load_model,
+        mock_transcribe,
+        mock_show_results,
+    ):
+        mock_sample_audio.exists.return_value = True
+        mock_sample_audio.read_bytes.return_value = b"sample_wav"
+        mock_sample_ref.read_text.return_value = "sample ref"
+        # First button (Try with sample) = True, second (Transcribe) = False
+        mock_st.button.side_effect = [True, False]
+        mock_st.status.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_st.status.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.file_uploader.return_value = None
+        mock_st.text_area.return_value = ""
+        mock_st.session_state = {}
+
+        audio_tab(None, "upload")
+
+        mock_transcribe.assert_called_once()
+        assert mock_st.session_state["text_upload"] == "sample transcription"
+        assert mock_st.session_state["sample_ref_upload"] == "sample ref"
+        assert mock_st.session_state["audio_id_upload"] == "sample"
+
+    @patch("streamlit_app.show_results")
+    @patch("streamlit_app.SAMPLE_AUDIO")
+    @patch("streamlit_app.st")
+    def test_sample_ref_used_as_fallback(
+        self, mock_st, mock_sample_audio, mock_show_results
+    ):
+        mock_sample_audio.exists.return_value = True
+        mock_sample_audio.read_bytes.return_value = b"sample_wav"
+        mock_st.button.return_value = False
+        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.file_uploader.return_value = None
+        mock_st.text_area.return_value = ""
+        mock_st.session_state = {
+            "audio_id_upload": "sample",
+            "text_upload": "transcribed",
+            "sample_ref_upload": "sample ref text",
+        }
+
+        audio_tab(None, "upload")
+
+        mock_show_results.assert_called_once_with(
+            "transcribed", "sample ref text", "upload"
+        )
 
 
 class TestShowResults:
