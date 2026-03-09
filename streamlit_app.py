@@ -1,6 +1,7 @@
 import io
 import json
 import warnings
+from pathlib import Path
 
 for msg in [
     "Using padding='same' with even kernel lengths",
@@ -16,8 +17,6 @@ import pyctcdecode  # noqa: E402
 import streamlit as st  # noqa: E402
 import torch  # noqa: E402
 from transformers import AutoModelForCTC, AutoProcessor  # noqa: E402
-
-from pathlib import Path  # noqa: E402
 
 from utils.helper import compute_wer, html_diff  # noqa: E402
 
@@ -160,7 +159,10 @@ def audio_tab(audio_data, key: str):
                 status.update(label="Complete!", state="complete", expanded=False)
             st.session_state[f"text_{key}"] = text
             st.session_state[f"audio_id_{key}"] = "sample"
-            st.session_state[f"sample_ref_{key}"] = SAMPLE_REF.read_text()
+            if SAMPLE_REF.exists():
+                st.session_state[f"sample_ref_{key}"] = SAMPLE_REF.read_text(
+                    encoding="utf-8"
+                )
             st.toast("Transcription complete!")
 
     with st.expander("Compare against reference transcript"):
