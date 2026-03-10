@@ -274,6 +274,54 @@ class TestAudioTabSample:
             "transcribed", "sample ref text", "upload"
         )
 
+    @patch("streamlit_app.show_results")
+    @patch("streamlit_app.SAMPLE_AUDIO")
+    @patch("streamlit_app.st")
+    def test_sample_audio_playback(self, mock_st, mock_sample_audio, mock_show_results):
+        mock_sample_audio.exists.return_value = True
+        mock_sample_audio.read_bytes.return_value = b"sample_wav"
+        mock_st.button.return_value = False
+        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.file_uploader.return_value = None
+        mock_st.text_area.return_value = ""
+        mock_st.session_state = {
+            "audio_id_upload": "sample",
+            "text_upload": "transcribed",
+        }
+
+        audio_tab(None, "upload")
+
+        mock_st.audio.assert_called_once_with(b"sample_wav", format="audio/wav")
+
+    @patch("streamlit_app.show_results")
+    @patch("streamlit_app.SAMPLE_AUDIO")
+    @patch("streamlit_app.st")
+    def test_stale_check_clears_sample_on_new_upload(
+        self, mock_st, mock_sample_audio, mock_show_results
+    ):
+        mock_sample_audio.exists.return_value = True
+        mock_st.button.return_value = False
+        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.file_uploader.return_value = None
+        mock_st.text_area.return_value = ""
+        mock_st.session_state = {
+            "audio_id_upload": "sample",
+            "text_upload": "old transcription",
+            "sample_ref_upload": "old ref",
+        }
+
+        # Simulate user uploading their own audio
+        audio_data = MagicMock()
+        audio_data.size = 200
+
+        audio_tab(audio_data, "upload")
+
+        assert "text_upload" not in mock_st.session_state
+        assert "sample_ref_upload" not in mock_st.session_state
+        assert mock_st.session_state["audio_id_upload"] == 200
+
 
 class TestShowResults:
     @patch("streamlit_app.st")
@@ -355,6 +403,35 @@ class TestShowResults:
         show_results("hello world", "", "test")
         data = json.loads(mock_st.download_button.call_args[0][1])
         assert data["corrected_transcription"] == "corrected text"
+
+    @patch("streamlit_app.st")
+    def test_json_includes_reference_and_metrics(self, mock_st):
+        mock_st.text_area.return_value = "the cat sat"
+        col_wer = MagicMock()
+        col_breakdown = MagicMock()
+        mock_st.columns.return_value = [col_wer, col_breakdown]
+
+        show_results("the cat sat", "the dog sat", "test")
+
+        data = json.loads(mock_st.download_button.call_args[0][1])
+        assert data["reference"] == "the dog sat"
+        assert "metrics" in data
+        assert data["metrics"]["substitutions"] == 1
+        assert data["metrics"]["wer"] == 1 / 3
+
+    @patch("streamlit_app.st")
+    def test_word_diff_rendered(self, mock_st):
+        mock_st.text_area.return_value = "the cat sat"
+        col_wer = MagicMock()
+        col_breakdown = MagicMock()
+        mock_st.columns.return_value = [col_wer, col_breakdown]
+
+        show_results("the cat sat", "the dog sat", "test")
+
+        mock_st.markdown.assert_called_once()
+        html = mock_st.markdown.call_args[0][0]
+        assert "line-through" in html
+        assert "font-weight:bold" in html
 
 
 class TestMatchRefs:
@@ -514,3 +591,117 @@ class TestBatchTab:
         results = mock_st.session_state["batch_results"]
         assert "metrics" in results[0]
         assert results[0]["metrics"]["wer"] == 0.0
+
+    @patch("streamlit_app.transcribe")
+    @patch("streamlit_app.load_model")
+    @patch("streamlit_app.st")
+    def test_no_metrics_without_matching_ref(
+        self, mock_st, mock_load_model, mock_transcribe
+    ):
+        mock_load_model.return_value = (MagicMock(), MagicMock(), MagicMock())
+        mock_transcribe.return_value = "hello world"
+
+        audio = MagicMock()
+        audio.name = "clip.wav"
+        audio.getvalue.return_value = b"audio"
+
+        mock_st.file_uploader.side_effect = [[audio], []]
+        mock_st.button.return_value = True
+        mock_st.status.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_st.status.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.session_state = {}
+
+        batch_tab()
+
+        results = mock_st.session_state["batch_results"]
+        assert "metrics" not in results[0]
+        assert results[0]["transcription"] == "hello world"
+
+    @patch("streamlit_app.transcribe")
+    @patch("streamlit_app.load_model")
+    @patch("streamlit_app.st")
+    def test_warns_on_non_utf8_ref(self, mock_st, mock_load_model, mock_transcribe):
+        mock_load_model.return_value = (MagicMock(), MagicMock(), MagicMock())
+        mock_transcribe.return_value = "hello"
+
+        audio = MagicMock()
+        audio.name = "clip.wav"
+        audio.getvalue.return_value = b"audio"
+        bad_ref = MagicMock()
+        bad_ref.name = "clip.txt"
+        bad_ref.getvalue.return_value = b"\xff\xfe"
+
+        mock_st.file_uploader.side_effect = [[audio], [bad_ref]]
+        mock_st.button.return_value = True
+        mock_st.status.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_st.status.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.session_state = {}
+
+        batch_tab()
+
+        mock_st.warning.assert_called_once()
+        assert "clip.txt" in mock_st.warning.call_args[0][0]
+
+    @patch("streamlit_app.st")
+    def test_aggregate_row_in_dataframe(self, mock_st):
+        mock_st.file_uploader.side_effect = [[], []]
+        mock_st.button.return_value = False
+        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.session_state = {
+            "batch_results": [
+                {
+                    "filename": "a.wav",
+                    "transcription": "hello",
+                    "metrics": {
+                        "wer": 0.5,
+                        "insertions": 1,
+                        "deletions": 0,
+                        "substitutions": 0,
+                        "ref_tokens": 2,
+                    },
+                },
+                {
+                    "filename": "b.wav",
+                    "transcription": "world",
+                    "metrics": {
+                        "wer": 0.0,
+                        "insertions": 0,
+                        "deletions": 0,
+                        "substitutions": 0,
+                        "ref_tokens": 2,
+                    },
+                },
+            ]
+        }
+
+        batch_tab()
+
+        rows = mock_st.dataframe.call_args[0][0]
+        assert len(rows) == 3
+        assert rows[2]["Filename"] == "AGGREGATE"
+        assert rows[2]["WER"] == "25.00%"
+        assert rows[2]["Insertions"] == 1
+
+    @patch("streamlit_app.st")
+    def test_download_json_content(self, mock_st):
+        mock_st.file_uploader.side_effect = [[], []]
+        mock_st.button.return_value = False
+        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
+        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.session_state = {
+            "batch_results": [
+                {"filename": "test.wav", "transcription": "hello world"},
+            ]
+        }
+
+        batch_tab()
+
+        data = json.loads(mock_st.download_button.call_args[0][1])
+        assert len(data) == 1
+        assert data[0]["filename"] == "test.wav"
+        assert data[0]["transcription"] == "hello world"
