@@ -224,7 +224,7 @@ def audio_tab(audio_data, key: str):
         show_results(st.session_state[f"text_{key}"], ref, key)
 
 
-def _match_refs(ref_files):
+def _match_refs(ref_files: list) -> tuple[dict[str, str], list[str]]:
     ref_map = {}
     errors = []
     for f in ref_files:
@@ -236,7 +236,7 @@ def _match_refs(ref_files):
     return ref_map, errors
 
 
-def _aggregate_wer(results):
+def _aggregate_wer(results: list[dict]) -> float | None:
     total_edits = 0
     total_ref_tokens = 0
     for r in results:
