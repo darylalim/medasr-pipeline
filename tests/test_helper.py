@@ -51,6 +51,17 @@ class TestComputeWer:
         result = compute_wer("one two three four", "one two three four")
         assert result["ref_tokens"] == 4
 
+    def test_empty_normalized_ref_with_hyp(self):
+        result = compute_wer("---", "hello world")
+        assert result["wer"] == 1.0
+        assert result["ref_tokens"] == 0
+        assert result["insertions"] == 2
+
+    def test_both_empty_normalized(self):
+        result = compute_wer("---", "---")
+        assert result["wer"] == 0.0
+        assert result["ref_tokens"] == 0
+
 
 class TestColoredDiff:
     def test_identical_texts(self):

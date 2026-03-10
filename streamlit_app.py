@@ -18,7 +18,7 @@ import streamlit as st  # noqa: E402
 import torch  # noqa: E402
 from transformers import AutoModelForCTC, AutoProcessor  # noqa: E402
 
-from utils.helper import compute_wer, html_diff  # noqa: E402
+from utils.helper import compute_wer, html_diff, normalize  # noqa: E402
 
 load_dotenv()
 
@@ -69,7 +69,8 @@ def load_model():
     return processor, model, decoder
 
 
-_CLEANUP = str.maketrans({" ": "", "#": " "})
+# CTC decoder outputs '#' as word separator and literal spaces as noise
+_DECODE_TRANS = str.maketrans({" ": "", "#": " "})
 
 
 def transcribe(audio_bytes: bytes, processor, model, decoder) -> str:
@@ -80,7 +81,7 @@ def transcribe(audio_bytes: bytes, processor, model, decoder) -> str:
         logits = model(**inputs).logits
     log_probs = logits.log_softmax(dim=-1).cpu().float().numpy()[0]
     text = decoder.decode_beams(log_probs, beam_width=8)[0][0]
-    return text.translate(_CLEANUP).replace("</s>", "").strip()
+    return text.translate(_DECODE_TRANS).replace("</s>", "").strip()
 
 
 def _wer_label(wer: float) -> str:
@@ -93,7 +94,7 @@ def _wer_label(wer: float) -> str:
     return "Poor"
 
 
-def show_results(text: str, ref_text: str, key: str):
+def show_results(text: str, ref_text: str, key: str) -> None:
     st.subheader("Transcription")
     st.code(text, language=None)
 
@@ -108,7 +109,7 @@ def show_results(text: str, ref_text: str, key: str):
     if corrected != text:
         result["corrected_transcription"] = corrected
 
-    if ref_text.strip():
+    if normalize(ref_text):
         metrics = compute_wer(ref_text, text)
         result["reference"] = ref_text
         result["metrics"] = metrics
@@ -133,7 +134,7 @@ def show_results(text: str, ref_text: str, key: str):
                 "Reference Words": [ref_tokens] * 3,
             },
             hide_index=True,
-            width="stretch",
+            use_container_width=True,
         )
 
         st.subheader("Word-Level Diff")
@@ -148,17 +149,19 @@ def show_results(text: str, ref_text: str, key: str):
     )
 
 
-def audio_tab(audio_data, key: str):
+def audio_tab(audio_data, key: str) -> None:
     if SAMPLE_AUDIO.exists():
         if st.button("Try with sample", key=f"sample_{key}"):
+            sample_bytes = SAMPLE_AUDIO.read_bytes()
             with st.status("Transcribing sample...", expanded=True) as status:
                 st.write("Loading model...")
                 processor, model, decoder = load_model()
                 st.write("Transcribing audio...")
-                text = transcribe(SAMPLE_AUDIO.read_bytes(), processor, model, decoder)
+                text = transcribe(sample_bytes, processor, model, decoder)
                 status.update(label="Complete!", state="complete", expanded=False)
             st.session_state[f"text_{key}"] = text
             st.session_state[f"audio_id_{key}"] = "sample"
+            st.session_state[f"sample_bytes_{key}"] = sample_bytes
             if SAMPLE_REF.exists():
                 st.session_state[f"sample_ref_{key}"] = SAMPLE_REF.read_text(
                     encoding="utf-8"
@@ -195,7 +198,7 @@ def audio_tab(audio_data, key: str):
     if audio_data is not None:
         st.audio(audio_data)
     elif st.session_state.get(f"audio_id_{key}") == "sample":
-        st.audio(SAMPLE_AUDIO.read_bytes(), format="audio/wav")
+        st.audio(st.session_state.get(f"sample_bytes_{key}", b""), format="audio/wav")
 
     # Clear stale results when audio changes
     if audio_data is not None:
@@ -209,6 +212,7 @@ def audio_tab(audio_data, key: str):
         st.session_state[f"audio_id_{key}"] = audio_id
         st.session_state.pop(f"text_{key}", None)
         st.session_state.pop(f"sample_ref_{key}", None)
+        st.session_state.pop(f"sample_bytes_{key}", None)
 
     if st.button("Transcribe", key=f"transcribe_{key}", disabled=(audio_data is None)):
         with st.status("Transcribing...", expanded=True) as status:
@@ -249,7 +253,7 @@ def _aggregate_wer(results: list[dict]) -> float | None:
     return total_edits / total_ref_tokens
 
 
-def batch_tab():
+def batch_tab() -> None:
     audio_files = st.file_uploader(
         "Upload audio files",
         type=["wav", "mp3", "flac", "ogg", "webm", "m4a"],
@@ -281,7 +285,7 @@ def batch_tab():
                 ref = ref_map.get(stem, "")
 
                 entry = {"filename": audio_file.name, "transcription": text}
-                if ref.strip():
+                if normalize(ref):
                     metrics = compute_wer(ref, text)
                     entry["reference"] = ref
                     entry["metrics"] = metrics

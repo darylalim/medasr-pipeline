@@ -7,12 +7,39 @@ import torch
 from streamlit_app import (
     transcribe,
     _wer_label,
+    _patch_feature_extractor,
     audio_tab,
     show_results,
     _match_refs,
     _aggregate_wer,
     batch_tab,
 )
+
+
+def _mock_expander(mock_st):
+    """Configure mock context manager for st.expander."""
+    mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
+    mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+
+
+def _mock_status(mock_st):
+    """Configure mock context manager for st.status."""
+    mock_st.status.return_value.__enter__ = MagicMock(return_value=MagicMock())
+    mock_st.status.return_value.__exit__ = MagicMock(return_value=False)
+
+
+def _mock_batch_uploaders(mock_st, audio_files, ref_files):
+    """Configure file_uploader to return files by widget key."""
+
+    def side_effect(*args, **kwargs):
+        key = kwargs.get("key")
+        if key == "batch_audio":
+            return audio_files
+        if key == "batch_ref":
+            return ref_files
+        return None
+
+    mock_st.file_uploader.side_effect = side_effect
 
 
 class TestWerLabel:
@@ -99,13 +126,38 @@ class TestTranscribe:
         assert kwargs["return_tensors"] == "pt"
 
 
+class TestPatchFeatureExtractor:
+    def test_ignores_center_argument(self):
+        feature_extractor = MagicMock()
+        original_fn = MagicMock(return_value="result")
+        feature_extractor._torch_extract_fbank_features = original_fn
+
+        _patch_feature_extractor(feature_extractor)
+
+        result = feature_extractor._torch_extract_fbank_features(
+            "waveform", device="cpu", center=True
+        )
+        original_fn.assert_called_once_with("waveform", "cpu")
+        assert result == "result"
+
+    def test_works_without_center(self):
+        feature_extractor = MagicMock()
+        original_fn = MagicMock(return_value="result")
+        feature_extractor._torch_extract_fbank_features = original_fn
+
+        _patch_feature_extractor(feature_extractor)
+
+        result = feature_extractor._torch_extract_fbank_features("waveform")
+        original_fn.assert_called_once_with("waveform", "cpu")
+        assert result == "result"
+
+
 class TestAudioTabFileUpload:
     def _setup_st(
         self, mock_st, mock_sample_audio, ref_file, text_area_value, key="upload"
     ):
         mock_sample_audio.exists.return_value = False
-        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
-        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        _mock_expander(mock_st)
         mock_st.file_uploader.return_value = ref_file
         mock_st.text_area.return_value = text_area_value
         mock_st.button.return_value = False
@@ -183,8 +235,7 @@ class TestAudioTabSample:
     def test_sample_button_shown_when_files_exist(self, mock_st, mock_sample_audio):
         mock_sample_audio.exists.return_value = True
         mock_st.button.return_value = False
-        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
-        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        _mock_expander(mock_st)
         mock_st.file_uploader.return_value = None
         mock_st.text_area.return_value = ""
         mock_st.session_state = {}
@@ -200,8 +251,7 @@ class TestAudioTabSample:
     def test_sample_button_hidden_when_no_files(self, mock_st, mock_sample_audio):
         mock_sample_audio.exists.return_value = False
         mock_st.button.return_value = False
-        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
-        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        _mock_expander(mock_st)
         mock_st.file_uploader.return_value = None
         mock_st.text_area.return_value = ""
         mock_st.session_state = {}
@@ -234,10 +284,8 @@ class TestAudioTabSample:
         mock_sample_ref.read_text.return_value = "sample ref"
         # First button (Try with sample) = True, second (Transcribe) = False
         mock_st.button.side_effect = [True, False]
-        mock_st.status.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_st.status.return_value.__exit__ = MagicMock(return_value=False)
-        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
-        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        _mock_status(mock_st)
+        _mock_expander(mock_st)
         mock_st.file_uploader.return_value = None
         mock_st.text_area.return_value = ""
         mock_st.session_state = {}
@@ -248,6 +296,7 @@ class TestAudioTabSample:
         assert mock_st.session_state["text_upload"] == "sample transcription"
         assert mock_st.session_state["sample_ref_upload"] == "sample ref"
         assert mock_st.session_state["audio_id_upload"] == "sample"
+        assert mock_st.session_state["sample_bytes_upload"] == b"sample_wav"
 
     @patch("streamlit_app.show_results")
     @patch("streamlit_app.SAMPLE_AUDIO")
@@ -258,8 +307,7 @@ class TestAudioTabSample:
         mock_sample_audio.exists.return_value = True
         mock_sample_audio.read_bytes.return_value = b"sample_wav"
         mock_st.button.return_value = False
-        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
-        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        _mock_expander(mock_st)
         mock_st.file_uploader.return_value = None
         mock_st.text_area.return_value = ""
         mock_st.session_state = {
@@ -279,20 +327,19 @@ class TestAudioTabSample:
     @patch("streamlit_app.st")
     def test_sample_audio_playback(self, mock_st, mock_sample_audio, mock_show_results):
         mock_sample_audio.exists.return_value = True
-        mock_sample_audio.read_bytes.return_value = b"sample_wav"
         mock_st.button.return_value = False
-        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
-        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        _mock_expander(mock_st)
         mock_st.file_uploader.return_value = None
         mock_st.text_area.return_value = ""
         mock_st.session_state = {
             "audio_id_upload": "sample",
             "text_upload": "transcribed",
+            "sample_bytes_upload": b"cached_wav",
         }
 
         audio_tab(None, "upload")
 
-        mock_st.audio.assert_called_once_with(b"sample_wav", format="audio/wav")
+        mock_st.audio.assert_called_once_with(b"cached_wav", format="audio/wav")
 
     @patch("streamlit_app.show_results")
     @patch("streamlit_app.SAMPLE_AUDIO")
@@ -302,14 +349,14 @@ class TestAudioTabSample:
     ):
         mock_sample_audio.exists.return_value = True
         mock_st.button.return_value = False
-        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
-        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        _mock_expander(mock_st)
         mock_st.file_uploader.return_value = None
         mock_st.text_area.return_value = ""
         mock_st.session_state = {
             "audio_id_upload": "sample",
             "text_upload": "old transcription",
             "sample_ref_upload": "old ref",
+            "sample_bytes_upload": b"old_wav",
         }
 
         # Simulate user uploading their own audio
@@ -320,6 +367,7 @@ class TestAudioTabSample:
 
         assert "text_upload" not in mock_st.session_state
         assert "sample_ref_upload" not in mock_st.session_state
+        assert "sample_bytes_upload" not in mock_st.session_state
         assert mock_st.session_state["audio_id_upload"] == 200
 
 
@@ -364,7 +412,7 @@ class TestShowResults:
         assert data["Type"] == ["Insertions", "Deletions", "Substitutions"]
         assert data["Count"] == [0, 0, 1]
         kwargs = col_breakdown.dataframe.call_args[1]
-        assert kwargs["width"] == "stretch"
+        assert kwargs["use_container_width"] is True
 
     @patch("streamlit_app.st")
     def test_no_metrics_without_reference(self, mock_st):
@@ -518,12 +566,10 @@ class TestBatchTab:
         audio2.name = "file2.wav"
         audio2.getvalue.return_value = b"audio2"
 
-        mock_st.file_uploader.side_effect = [[audio1, audio2], []]
+        _mock_batch_uploaders(mock_st, [audio1, audio2], [])
         mock_st.button.return_value = True
-        mock_st.status.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_st.status.return_value.__exit__ = MagicMock(return_value=False)
-        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
-        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        _mock_status(mock_st)
+        _mock_expander(mock_st)
         mock_st.session_state = {}
 
         batch_tab()
@@ -536,7 +582,7 @@ class TestBatchTab:
 
     @patch("streamlit_app.st")
     def test_no_results_without_click(self, mock_st):
-        mock_st.file_uploader.side_effect = [[], []]
+        _mock_batch_uploaders(mock_st, [], [])
         mock_st.button.return_value = False
         mock_st.session_state = {}
 
@@ -547,10 +593,9 @@ class TestBatchTab:
 
     @patch("streamlit_app.st")
     def test_displays_stored_results(self, mock_st):
-        mock_st.file_uploader.side_effect = [[], []]
+        _mock_batch_uploaders(mock_st, [], [])
         mock_st.button.return_value = False
-        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
-        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        _mock_expander(mock_st)
         mock_st.session_state = {
             "batch_results": [
                 {"filename": "test.wav", "transcription": "hello"},
@@ -578,12 +623,10 @@ class TestBatchTab:
         ref.name = "clip.txt"
         ref.getvalue.return_value = b"hello world"
 
-        mock_st.file_uploader.side_effect = [[audio], [ref]]
+        _mock_batch_uploaders(mock_st, [audio], [ref])
         mock_st.button.return_value = True
-        mock_st.status.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_st.status.return_value.__exit__ = MagicMock(return_value=False)
-        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
-        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        _mock_status(mock_st)
+        _mock_expander(mock_st)
         mock_st.session_state = {}
 
         batch_tab()
@@ -605,12 +648,10 @@ class TestBatchTab:
         audio.name = "clip.wav"
         audio.getvalue.return_value = b"audio"
 
-        mock_st.file_uploader.side_effect = [[audio], []]
+        _mock_batch_uploaders(mock_st, [audio], [])
         mock_st.button.return_value = True
-        mock_st.status.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_st.status.return_value.__exit__ = MagicMock(return_value=False)
-        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
-        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        _mock_status(mock_st)
+        _mock_expander(mock_st)
         mock_st.session_state = {}
 
         batch_tab()
@@ -633,12 +674,10 @@ class TestBatchTab:
         bad_ref.name = "clip.txt"
         bad_ref.getvalue.return_value = b"\xff\xfe"
 
-        mock_st.file_uploader.side_effect = [[audio], [bad_ref]]
+        _mock_batch_uploaders(mock_st, [audio], [bad_ref])
         mock_st.button.return_value = True
-        mock_st.status.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_st.status.return_value.__exit__ = MagicMock(return_value=False)
-        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
-        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        _mock_status(mock_st)
+        _mock_expander(mock_st)
         mock_st.session_state = {}
 
         batch_tab()
@@ -648,10 +687,9 @@ class TestBatchTab:
 
     @patch("streamlit_app.st")
     def test_aggregate_row_in_dataframe(self, mock_st):
-        mock_st.file_uploader.side_effect = [[], []]
+        _mock_batch_uploaders(mock_st, [], [])
         mock_st.button.return_value = False
-        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
-        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        _mock_expander(mock_st)
         mock_st.session_state = {
             "batch_results": [
                 {
@@ -689,10 +727,9 @@ class TestBatchTab:
 
     @patch("streamlit_app.st")
     def test_download_json_content(self, mock_st):
-        mock_st.file_uploader.side_effect = [[], []]
+        _mock_batch_uploaders(mock_st, [], [])
         mock_st.button.return_value = False
-        mock_st.expander.return_value.__enter__ = MagicMock(return_value=None)
-        mock_st.expander.return_value.__exit__ = MagicMock(return_value=False)
+        _mock_expander(mock_st)
         mock_st.session_state = {
             "batch_results": [
                 {"filename": "test.wav", "transcription": "hello world"},

@@ -6,4 +6,3 @@
 .ruff_cache/
 __pycache__/
 .worktrees/
-docs/plans/

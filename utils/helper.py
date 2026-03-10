@@ -16,7 +16,16 @@ def normalize(s: str) -> str:
 def compute_wer(ref_text: str, hyp_text: str) -> dict:
     normalized_ref = normalize(ref_text)
     normalized_hyp = normalize(hyp_text)
-    measures = jiwer.process_words([normalized_ref], [normalized_hyp])
+    if not normalized_ref:
+        hyp_words = len(normalized_hyp.split()) if normalized_hyp else 0
+        return {
+            "wer": 0.0 if hyp_words == 0 else 1.0,
+            "insertions": hyp_words,
+            "deletions": 0,
+            "substitutions": 0,
+            "ref_tokens": 0,
+        }
+    measures = jiwer.process_words(normalized_ref, normalized_hyp)
     return {
         "wer": measures.wer,
         "insertions": measures.insertions,
@@ -29,7 +38,7 @@ def compute_wer(ref_text: str, hyp_text: str) -> dict:
 def _diff_parts(ref_text, hyp_text, fmt_replace, fmt_insert, fmt_delete):
     ref_words = normalize(ref_text).split()
     hyp_words = normalize(hyp_text).split()
-    edits = Levenshtein.editops(ref_words, hyp_words)
+    edits = Levenshtein.editops(ref_words, hyp_words)  # returns ops sorted by position
 
     r = 0
     parts: list[str] = []
