@@ -21,11 +21,12 @@ uv run ty check                        # Type check
 
 Audio input → librosa (16kHz) → AutoProcessor → model logits → log softmax → CTC beam search (kenlm, beam width 8) → transcribed text
 
-- `streamlit_app.py` — Main app with model caching (`@st.cache_resource`), auto device detection (MPS > CUDA > CPU), custom CTC decoder, session state persistence, status feedback, WER metrics (metric + dataframe layout) with HTML word diff, reference transcript file upload (UTF-8 validated), and JSON download
+- `streamlit_app.py` — Main app with model caching (`@st.cache_resource`), auto device detection (MPS > CUDA > CPU), custom CTC decoder, session state persistence, status feedback, WER metrics (metric + dataframe layout) with HTML word diff, reference transcript file upload (UTF-8 validated), JSON download, copy-to-clipboard via `st.code`, corrected transcript editing, sample audio demo button, and batch evaluation tab (`batch_tab`, `_match_refs`, `_aggregate_wer`) with multi-file transcription, aggregate WER, and expandable per-file results
 - `utils/helper.py` — Text normalization, WER computation (jiwer), colored diff output (ANSI and HTML)
+- `samples/` — Demo audio and reference transcript for the "Try with sample" button
 - `tests/test_helper.py` — Unit tests for helper utilities (normalize, compute_wer, colored_diff, html_diff, evaluate)
-- `tests/test_app.py` — Unit tests for transcribe, _wer_label, audio_tab file upload (including empty and non-UTF-8 edge cases), and show_results layout with mocked model/audio/Streamlit
-- `tests/data/` — Sample audio and reference transcripts
+- `tests/test_app.py` — Unit tests for transcribe, _wer_label, audio_tab (file upload, sample button), show_results (st.code, corrected transcript, layout), batch helpers (_match_refs, _aggregate_wer), and batch_tab with mocked model/audio/Streamlit
+- `tests/data/` — Sample audio and reference transcripts for tests
 
 ## Notes
 
