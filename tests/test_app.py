@@ -412,7 +412,7 @@ class TestShowResults:
         assert data["Type"] == ["Insertions", "Deletions", "Substitutions"]
         assert data["Count"] == [0, 0, 1]
         kwargs = col_breakdown.dataframe.call_args[1]
-        assert kwargs["use_container_width"] is True
+        assert kwargs["width"] == "stretch"
 
     @patch("streamlit_app.st")
     def test_no_metrics_without_reference(self, mock_st):
