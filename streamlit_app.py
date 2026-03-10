@@ -134,7 +134,7 @@ def show_results(text: str, ref_text: str, key: str) -> None:
                 "Reference Words": [ref_tokens] * 3,
             },
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )
 
         st.subheader("Word-Level Diff")
@@ -334,7 +334,7 @@ def batch_tab() -> None:
                 }
             )
 
-        st.dataframe(rows, hide_index=True)
+        st.dataframe(rows, hide_index=True, width="stretch")
 
         for r in results:
             with st.expander(r["filename"]):
