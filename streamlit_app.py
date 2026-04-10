@@ -2,12 +2,12 @@ import io
 from functools import cache
 import warnings
 
-for msg in [
+for _msg in (
     "Using padding='same' with even kernel lengths",
     "Unigrams not provided",
     "No known unigrams provided",
-]:
-    warnings.filterwarnings("ignore", message=msg)
+):
+    warnings.filterwarnings("ignore", message=_msg)
 
 from dotenv import load_dotenv  # noqa: E402
 import huggingface_hub  # noqa: E402
@@ -77,8 +77,12 @@ def transcribe(audio_bytes: bytes, processor, model, decoder) -> str:
     with torch.inference_mode():
         logits = model(**inputs).logits
     log_probs = logits.log_softmax(dim=-1).cpu().float().numpy()[0]
-    text = decoder.decode_beams(log_probs, beam_width=8)[0][0]
-    return text.translate(_DECODE_TRANS).replace("</s>", "").strip()
+    return (
+        decoder.decode_beams(log_probs, beam_width=8)[0][0]
+        .translate(_DECODE_TRANS)
+        .replace("</s>", "")
+        .strip()
+    )
 
 
 def audio_tab(audio_data, key: str) -> None:
