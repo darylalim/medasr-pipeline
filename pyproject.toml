@@ -5,9 +5,7 @@ description = "Medical dictation transcription using Google's MedASR model"
 requires-python = ">=3.12"
 dependencies = [
     "huggingface-hub",
-    "jiwer",
     "kenlm",
-    "levenshtein",
     "librosa",
     "pyctcdecode",
     "python-dotenv",
