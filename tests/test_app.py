@@ -1,13 +1,48 @@
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pytest
 import torch
 
 from streamlit_app import (
     transcribe,
+    _detect_device,
     _patch_feature_extractor,
     audio_tab,
 )
+
+
+class TestDetectDevice:
+    def setup_method(self):
+        _detect_device.cache_clear()
+
+    def teardown_method(self):
+        _detect_device.cache_clear()
+
+    @patch("streamlit_app.torch")
+    def test_prefers_cuda_over_mps(self, mock_torch):
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.backends.mps.is_available.return_value = True
+        mock_torch.float16 = torch.float16
+        device, dtype = _detect_device()
+        assert device == "cuda"
+        assert dtype == torch.float16
+
+    @patch("streamlit_app.torch")
+    def test_falls_back_to_mps(self, mock_torch):
+        mock_torch.cuda.is_available.return_value = False
+        mock_torch.backends.mps.is_available.return_value = True
+        mock_torch.float32 = torch.float32
+        device, dtype = _detect_device()
+        assert device == "mps"
+        assert dtype == torch.float32
+
+    @patch("streamlit_app.torch")
+    def test_raises_without_gpu(self, mock_torch):
+        mock_torch.cuda.is_available.return_value = False
+        mock_torch.backends.mps.is_available.return_value = False
+        with pytest.raises(RuntimeError, match="No GPU found"):
+            _detect_device()
 
 
 class TestTranscribe:
