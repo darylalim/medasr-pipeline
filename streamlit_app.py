@@ -1,4 +1,5 @@
 import io
+from functools import cache
 import warnings
 
 for msg in [
@@ -19,14 +20,15 @@ from transformers import AutoModelForCTC, AutoProcessor  # noqa: E402
 load_dotenv()
 
 MODEL_ID = "google/medasr"
-DEVICE = (
-    "mps"
-    if torch.backends.mps.is_available()
-    else "cuda"
-    if torch.cuda.is_available()
-    else "cpu"
-)
-DTYPE = torch.float16 if DEVICE == "cuda" else torch.float32
+
+
+@cache
+def _detect_device() -> tuple[str, torch.dtype]:
+    if torch.cuda.is_available():
+        return "cuda", torch.float16
+    if torch.backends.mps.is_available():
+        return "mps", torch.float32
+    raise RuntimeError("No GPU found — MedASR requires CUDA or MPS")
 
 
 def _patch_feature_extractor(feature_extractor):
@@ -44,8 +46,9 @@ def _patch_feature_extractor(feature_extractor):
 def load_model():
     processor = AutoProcessor.from_pretrained(MODEL_ID)
     _patch_feature_extractor(processor.feature_extractor)
-    model = AutoModelForCTC.from_pretrained(MODEL_ID, dtype=DTYPE).to(DEVICE).eval()
-    if DEVICE == "cuda":
+    device, dtype = _detect_device()
+    model = AutoModelForCTC.from_pretrained(MODEL_ID, dtype=dtype).to(device).eval()
+    if device == "cuda":
         model = torch.compile(model)
     lm_path = huggingface_hub.hf_hub_download(MODEL_ID, filename="lm_6.kenlm")
     tokenizer = processor.tokenizer
@@ -67,8 +70,10 @@ _DECODE_TRANS = str.maketrans({" ": "", "#": " "})
 
 def transcribe(audio_bytes: bytes, processor, model, decoder) -> str:
     speech, _ = librosa.load(io.BytesIO(audio_bytes), sr=16000)
-    inputs = processor(speech, sampling_rate=16000, return_tensors="pt")
-    inputs = inputs.to(device=DEVICE, dtype=DTYPE)
+    device, dtype = _detect_device()
+    inputs = processor(speech, sampling_rate=16000, return_tensors="pt").to(
+        device=device, dtype=dtype
+    )
     with torch.inference_mode():
         logits = model(**inputs).logits
     log_probs = logits.log_softmax(dim=-1).cpu().float().numpy()[0]
