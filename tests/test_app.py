@@ -112,6 +112,37 @@ class TestAudioTab:
             "Transcribe", key="transcribe_upload", disabled=True
         )
 
+    @patch("streamlit_app.st")
+    def test_transcribe_button_enabled_with_audio(self, mock_st):
+        mock_st.button.return_value = False
+        mock_st.session_state = {}
+        audio_data = MagicMock()
+
+        audio_tab(audio_data, "upload")
+
+        mock_st.button.assert_called_once_with(
+            "Transcribe", key="transcribe_upload", disabled=False
+        )
+
+    @patch("streamlit_app.st")
+    def test_plays_audio_when_provided(self, mock_st):
+        mock_st.button.return_value = False
+        mock_st.session_state = {}
+        audio_data = MagicMock()
+
+        audio_tab(audio_data, "upload")
+
+        mock_st.audio.assert_called_once_with(audio_data)
+
+    @patch("streamlit_app.st")
+    def test_no_audio_playback_without_data(self, mock_st):
+        mock_st.button.return_value = False
+        mock_st.session_state = {}
+
+        audio_tab(None, "upload")
+
+        mock_st.audio.assert_not_called()
+
     @patch("streamlit_app.transcribe", return_value="hello world")
     @patch(
         "streamlit_app.load_model",
@@ -131,6 +162,26 @@ class TestAudioTab:
         mock_transcribe.assert_called_once()
         assert mock_st.session_state["text_upload"] == "hello world"
 
+    @patch("streamlit_app.transcribe", return_value="hello world")
+    @patch(
+        "streamlit_app.load_model",
+        return_value=(MagicMock(), MagicMock(), MagicMock()),
+    )
+    @patch("streamlit_app.st")
+    def test_toast_shown_after_transcription(
+        self, mock_st, mock_load_model, mock_transcribe
+    ):
+        mock_st.button.return_value = True
+        mock_st.status.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_st.status.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.session_state = {}
+        audio_data = MagicMock()
+        audio_data.getvalue.return_value = b"fake_audio"
+
+        audio_tab(audio_data, "upload")
+
+        mock_st.toast.assert_called_once_with("Transcription complete!")
+
     @patch("streamlit_app.st")
     def test_displays_transcription_when_in_session(self, mock_st):
         mock_st.button.return_value = False
@@ -138,6 +189,7 @@ class TestAudioTab:
 
         audio_tab(None, "upload")
 
+        mock_st.subheader.assert_called_once_with("Transcription")
         mock_st.text_area.assert_called_once_with(
             "Transcription",
             value="transcribed text",
