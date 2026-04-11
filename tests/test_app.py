@@ -194,7 +194,7 @@ class TestAudioTab:
 
         audio_tab(audio_data, "upload")
 
-        mock_st.toast.assert_called_once_with("Transcription complete!")
+        assert mock_st.session_state["text_upload"] == "hello world"
 
     @patch("streamlit_app.st")
     def test_displays_transcription_when_in_session(self, mock_st):

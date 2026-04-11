@@ -100,7 +100,6 @@ def audio_tab(audio_data, key: str) -> None:
         with st.spinner("Transcribing..."):
             text = transcribe(audio_data.getvalue(), *load_model())
         st.session_state[text_key] = text
-        st.toast("Transcription complete!")
 
     if text_key in st.session_state:
         st.text_area(
