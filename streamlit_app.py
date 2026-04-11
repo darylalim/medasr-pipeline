@@ -68,14 +68,14 @@ def load_model():
 _DECODE_TRANS = str.maketrans({" ": "", "#": " "})
 
 
+@torch.inference_mode()
 def transcribe(audio_bytes: bytes, processor, model, decoder) -> str:
     speech, _ = librosa.load(io.BytesIO(audio_bytes), sr=16000)
     device, dtype = _detect_device()
     inputs = processor(speech, sampling_rate=16000, return_tensors="pt").to(
         device=device, dtype=dtype
     )
-    with torch.inference_mode():
-        logits = model(**inputs).logits
+    logits = model(**inputs).logits
     log_probs = logits.log_softmax(dim=-1).cpu().float().numpy()[0]
     return (
         decoder.decode_beams(log_probs, beam_width=8)[0][0]
