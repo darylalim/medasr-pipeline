@@ -89,7 +89,12 @@ def audio_tab(audio_data, key: str) -> None:
     if audio_data is not None:
         st.audio(audio_data)
 
-    if st.button("Transcribe", key=f"transcribe_{key}", disabled=(audio_data is None)):
+    if st.button(
+        "Transcribe",
+        key=f"transcribe_{key}",
+        disabled=(audio_data is None),
+        type="primary",
+    ):
         with st.status("Transcribing...", expanded=True) as status:
             st.write("Loading model...")
             processor, model, decoder = load_model()

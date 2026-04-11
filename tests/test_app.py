@@ -144,7 +144,7 @@ class TestAudioTab:
         audio_tab(None, "upload")
 
         mock_st.button.assert_called_once_with(
-            "Transcribe", key="transcribe_upload", disabled=True
+            "Transcribe", key="transcribe_upload", disabled=True, type="primary"
         )
 
     @patch("streamlit_app.st")
@@ -156,7 +156,7 @@ class TestAudioTab:
         audio_tab(audio_data, "upload")
 
         mock_st.button.assert_called_once_with(
-            "Transcribe", key="transcribe_upload", disabled=False
+            "Transcribe", key="transcribe_upload", disabled=False, type="primary"
         )
 
     @patch("streamlit_app.st")
