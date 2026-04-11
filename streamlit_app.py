@@ -86,6 +86,8 @@ def transcribe(audio_bytes: bytes, processor, model, decoder) -> str:
 
 
 def audio_tab(audio_data, key: str) -> None:
+    text_key = f"text_{key}"
+
     if audio_data is not None:
         st.audio(audio_data)
 
@@ -96,22 +98,21 @@ def audio_tab(audio_data, key: str) -> None:
         type="primary",
     ):
         with st.spinner("Transcribing..."):
-            processor, model, decoder = load_model()
-            text = transcribe(audio_data.getvalue(), processor, model, decoder)
-        st.session_state[f"text_{key}"] = text
+            text = transcribe(audio_data.getvalue(), *load_model())
+        st.session_state[text_key] = text
         st.toast("Transcription complete!")
 
-    if f"text_{key}" in st.session_state:
+    if text_key in st.session_state:
         st.text_area(
             "Transcription",
-            value=st.session_state[f"text_{key}"],
+            value=st.session_state[text_key],
             height=300,
             disabled=True,
             label_visibility="collapsed",
         )
         st.download_button(
             "Download",
-            data=st.session_state[f"text_{key}"],
+            data=st.session_state[text_key],
             file_name="transcription.txt",
             key=f"download_{key}",
         )
