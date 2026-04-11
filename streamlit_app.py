@@ -95,12 +95,9 @@ def audio_tab(audio_data, key: str) -> None:
         disabled=(audio_data is None),
         type="primary",
     ):
-        with st.status("Transcribing...", expanded=True) as status:
-            st.write("Loading model...")
+        with st.spinner("Transcribing..."):
             processor, model, decoder = load_model()
-            st.write("Transcribing audio...")
             text = transcribe(audio_data.getvalue(), processor, model, decoder)
-            status.update(label="Complete!", state="complete", expanded=False)
         st.session_state[f"text_{key}"] = text
         st.toast("Transcription complete!")
 

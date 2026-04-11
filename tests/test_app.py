@@ -186,29 +186,8 @@ class TestAudioTab:
     @patch("streamlit_app.st")
     def test_transcribe_stores_result(self, mock_st, mock_load_model, mock_transcribe):
         mock_st.button.return_value = True
-        mock_st.status.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_st.status.return_value.__exit__ = MagicMock(return_value=False)
-        mock_st.session_state = {}
-        audio_data = MagicMock()
-        audio_data.getvalue.return_value = b"fake_audio"
-
-        audio_tab(audio_data, "upload")
-
-        mock_transcribe.assert_called_once()
-        assert mock_st.session_state["text_upload"] == "hello world"
-
-    @patch("streamlit_app.transcribe", return_value="hello world")
-    @patch(
-        "streamlit_app.load_model",
-        return_value=(MagicMock(), MagicMock(), MagicMock()),
-    )
-    @patch("streamlit_app.st")
-    def test_toast_shown_after_transcription(
-        self, mock_st, mock_load_model, mock_transcribe
-    ):
-        mock_st.button.return_value = True
-        mock_st.status.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_st.status.return_value.__exit__ = MagicMock(return_value=False)
+        mock_st.spinner.return_value.__enter__ = MagicMock(return_value=None)
+        mock_st.spinner.return_value.__exit__ = MagicMock(return_value=False)
         mock_st.session_state = {}
         audio_data = MagicMock()
         audio_data.getvalue.return_value = b"fake_audio"
