@@ -102,7 +102,6 @@ def audio_tab(audio_data, key: str) -> None:
         st.toast("Transcription complete!")
 
     if f"text_{key}" in st.session_state:
-        st.subheader("Transcription")
         st.text_area(
             "Transcription",
             value=st.session_state[f"text_{key}"],

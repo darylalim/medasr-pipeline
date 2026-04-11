@@ -203,7 +203,6 @@ class TestAudioTab:
 
         audio_tab(None, "upload")
 
-        mock_st.subheader.assert_called_once_with("Transcription")
         mock_st.text_area.assert_called_once_with(
             "Transcription",
             value="transcribed text",
