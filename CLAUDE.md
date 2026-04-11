@@ -21,7 +21,7 @@ uv run ty check                        # Type check
 
 Audio input → librosa (16kHz) → AutoProcessor → model logits → log softmax → CTC beam search (kenlm, beam width 8) → transcribed text
 
-- `streamlit_app.py` — Main app: model caching (`@st.cache_resource`), device detection (CUDA > MPS, no CPU fallback), CTC decoder, two tabs (Record, Upload), transcription output in disabled text area
+- `streamlit_app.py` — Main app: model caching (`@st.cache_resource`), device detection (CUDA > MPS, no CPU fallback), CTC decoder, two tabs (Record, Upload), transcription output in disabled text area with download button
 - `tests/test_app.py` — Tests for transcribe, _patch_feature_extractor, audio_tab
 
 ## Notes
