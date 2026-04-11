@@ -105,6 +105,7 @@ def audio_tab(audio_data, key: str) -> None:
         st.text_area(
             "Transcription",
             value=st.session_state[f"text_{key}"],
+            height=300,
             disabled=True,
             label_visibility="collapsed",
         )

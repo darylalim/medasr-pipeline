@@ -206,6 +206,7 @@ class TestAudioTab:
         mock_st.text_area.assert_called_once_with(
             "Transcription",
             value="transcribed text",
+            height=300,
             disabled=True,
             label_visibility="collapsed",
         )
