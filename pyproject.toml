@@ -1,6 +1,6 @@
 [project]
 name = "medasr-pipeline"
-version = "0.3.0"
+version = "0.4.0"
 description = "Medical dictation transcription using Google's MedASR model"
 requires-python = ">=3.12"
 dependencies = [

@@ -22,7 +22,7 @@ uv run ty check                        # Type check
 Audio input → librosa (16kHz) → AutoProcessor → model logits → log softmax → CTC beam search (kenlm, beam width 8) → transcribed text
 
 - `streamlit_app.py` — Main app: model caching (`@st.cache_resource`), device detection (CUDA > MPS, no CPU fallback), CTC decoder, two tabs (Record, Upload), transcription output in disabled text area with download button
-- `tests/test_app.py` — Tests for transcribe, _patch_feature_extractor, audio_tab
+- `tests/test_app.py` — Tests for _detect_device, transcribe, _patch_feature_extractor, audio_tab
 
 ## Notes
 
@@ -30,6 +30,7 @@ Audio input → librosa (16kHz) → AutoProcessor → model logits → log softm
 - `warnings.filterwarnings` calls must remain before library imports to suppress warnings at import time; imports use `# noqa: E402` to satisfy ruff
 - On CUDA, inference runs in float16 for ~40-50% VRAM reduction and ~20-30% speedup; MPS remains float32 (float16 is unreliable on MPS)
 - `torch.compile` is applied on CUDA only — first inference is slower (compilation warmup), subsequent calls are ~10-30% faster
+- `@torch.inference_mode()` wraps `transcribe` so all tensor operations (including `log_softmax`) skip autograd tracking
 - `_patch_feature_extractor` works around a transformers 5.2.0 bug (`huggingface/transformers#38341`) — remove when the upstream fix is released
 
 ## Environment
