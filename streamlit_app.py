@@ -109,6 +109,12 @@ def audio_tab(audio_data, key: str) -> None:
             disabled=True,
             label_visibility="collapsed",
         )
+        st.download_button(
+            "Download",
+            data=st.session_state[f"text_{key}"],
+            file_name="transcription.txt",
+            key=f"download_{key}",
+        )
 
 
 st.set_page_config(page_title="MedASR", page_icon="\U0001fa7a", layout="centered")

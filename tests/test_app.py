@@ -210,3 +210,9 @@ class TestAudioTab:
             disabled=True,
             label_visibility="collapsed",
         )
+        mock_st.download_button.assert_called_once_with(
+            "Download",
+            data="transcribed text",
+            file_name="transcription.txt",
+            key="download_upload",
+        )
